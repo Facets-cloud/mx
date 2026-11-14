@@ -1,11 +1,12 @@
-# mx
+# mx · mac exec
 
-mx lets coding agents (Claude Code, Codex, Cursor, Claude Desktop) drive the
-apps on your Mac through the macOS accessibility API. It reaches the whole
-Mac, not just one app: Slack, Mail, Notes, Finder, any native or Electron
-app, plus menus, windows, Control Center, the Dock, System Settings and
-dialogs. It works in the background by default, so you keep typing in your
-own app while the agent works in another.
+Like `docker exec`, but the container is your Mac. mx lets coding agents
+(Claude Code, Codex, Cursor, Claude Desktop) run their steps inside the Mac
+apps you already have open and signed in to, through the macOS accessibility
+API. It reaches the whole Mac, not just one app: Slack, Mail, Notes, Finder,
+any native or Electron app, plus menus, windows, Control Center, the Dock,
+System Settings and dialogs. It works in the background by default, so you
+keep typing in your own app while the agent works in another.
 
 mx is one Swift binary that uses only Apple's frameworks. It speaks MCP
 (JSON-RPC 2.0) on stdio, sends nothing over the network and has no

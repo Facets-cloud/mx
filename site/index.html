@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>mx · for the whole Mac</title>
-<meta name="description" content="mx is an MCP server that lets your coding agent use the apps on your Mac through the accessibility API, in the background while you keep working, or in front of you.">
+<title>mx · mac exec</title>
+<meta name="description" content="mx is mac exec: an MCP server that runs your coding agent's steps inside the Mac apps you already have open and signed in to, in the background while you keep working, or in front of you.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -56,7 +56,13 @@
   .eyebrow { display: inline-flex; align-items: center; gap: 10px; font: 500 13px "JetBrains Mono", monospace; color: var(--muted); border: 1px solid var(--line); border-radius: 99px; padding: 6px 14px; background: var(--card); }
   .eyebrow i { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 20%, transparent); }
   .word { margin-top: 28px; display: inline-flex; flex-direction: column; align-items: center; gap: 10px; }
-  .word .box { font: 700 clamp(56px, 8vw, 92px)/1 "JetBrains Mono", monospace; letter-spacing: -0.06em; padding: 10px 26px 16px; border: 3px solid var(--acc); border-radius: 22px; transition: box-shadow .6s ease; }
+  .word .box { font: 700 clamp(46px, 7vw, 84px)/1 "JetBrains Mono", monospace; letter-spacing: -0.06em; white-space: nowrap; padding: 10px 26px 16px; border: 3px solid var(--acc); border-radius: 22px; transition: box-shadow .6s ease; }
+  /* "mx" unfolds into "mac exec" */
+  .word .k { color: var(--acc); }
+  .word .rest { display: inline-block; overflow: hidden; vertical-align: bottom; max-width: 0; transition: max-width 1.1s cubic-bezier(.2,.8,.2,1); }
+  .word.open .rest { max-width: 6em; }
+  .word .gap { display: inline-block; width: 0; transition: width 1.1s cubic-bezier(.2,.8,.2,1); }
+  .word.open .gap { width: .45em; }
   .word.on .box { box-shadow: 0 0 0 6px var(--glow); }
   .word .pill { opacity: 0; transform: translateY(-6px); transition: opacity .5s ease .35s, transform .5s ease .35s; }
   .word.on .pill { opacity: 1; transform: none; }
@@ -81,8 +87,8 @@
 
   /* Video frames: a window with mx's border, the pill under it */
   .framed { position: relative; padding-bottom: 40px; }
-  .framed .win { position: relative; border-radius: 14px; overflow: hidden; background: #0d0d10; aspect-ratio: 16 / 10; outline: 2.5px solid var(--acc); outline-offset: 3px; box-shadow: 0 30px 80px -20px rgba(0,0,0,.35); }
-  .framed .win video { width: 100%; height: 100%; display: block; object-fit: cover; }
+  .framed .win { position: relative; border-radius: 14px; overflow: hidden; background: #0d0d10; aspect-ratio: 16 / 9; outline: 2.5px solid var(--acc); outline-offset: 3px; box-shadow: 0 30px 80px -20px rgba(0,0,0,.35); }
+  .framed .win video { width: 100%; height: 100%; display: block; object-fit: contain; }
   .framed > .pill { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); }
   .soon { position: absolute; inset: 0; display: none; align-items: flex-end; justify-content: flex-start; padding: 16px; background-size: cover; background-position: center; }
   .soon span { font: 500 12px "JetBrains Mono", monospace; color: #e8e8e3; background: rgba(0,0,0,.55); padding: 5px 10px; border-radius: 6px; }
@@ -229,7 +235,7 @@
     .chain { grid-template-columns: 1fr; }
     .arrow::after { width: 1px; height: 22px; background: linear-gradient(180deg, var(--faint), var(--acc)); }
     .hero { padding-top: 48px; }
-    .runs .framed { position: static; }
+    .runs .framed { position: relative; top: 0; }
   }
   @media (max-width: 560px) {
     nav .links a.opt { display: none; }
@@ -244,7 +250,7 @@
   }
   @media (prefers-reduced-motion: reduce) {
     .spin, .desk .yours .caret { animation: none; }
-    .word .box, .word .pill { transition: none; }
+    .word .box, .word .pill, .word .rest, .word .gap { transition: none; }
   }
 </style>
 </head>
@@ -252,7 +258,7 @@
 <nav>
   <div class="wrap">
     <a class="mark" href="#">mx</a>
-    <div class="links"><a class="opt" href="#runs">Runs</a><a class="opt" href="#how">How it works</a><a class="opt" href="#modes">Modes</a><a class="opt" href="#safety">Safety</a><a href="#setup">Setup</a><a href="https://github.com/Facets-cloud/mx">GitHub</a><button class="theme" id="theme" type="button" aria-label="Switch theme">auto</button></div>
+    <div class="links"><a class="opt" href="#runs">Runs</a><a class="opt" href="#exec">How it works</a><a class="opt" href="#modes">Modes</a><a class="opt" href="#safety">Safety</a><a href="#setup">Setup</a><a href="https://github.com/Facets-cloud/mx">GitHub</a><button class="theme" id="theme" type="button" aria-label="Switch theme">auto</button></div>
   </div>
 </nav>
 
@@ -260,7 +266,7 @@
   <div class="wrap">
     <div>
       <span class="eyebrow"><i></i>MCP server · v0.1 · macOS 14+</span>
-      <div><div class="word" id="word"><span class="box">mx</span><span class="pill"><span class="spin"></span>mx · for the whole Mac</span></div></div>
+      <div><div class="word" id="word"><span class="box" aria-label="mx: mac exec"><span class="k">m</span><span class="rest">ac</span><span class="gap"></span><span class="rest">e</span><span class="k">x</span><span class="rest">ec</span></span><span class="pill"><span class="spin"></span>mx · for the whole Mac</span></div></div>
       <h1>Your agent uses the apps on your Mac. You keep using yours.</h1>
       <p class="lede">mx gives Claude Code, Codex and Cursor the Mac's accessibility tree: Slack, Mail, Notes, Finder, Control Center, menus and System Settings. It works in the background by default, and in front of you when you ask.</p>
       <div class="installer"></div>
@@ -285,20 +291,43 @@
   <section id="runs">
     <div class="kicker">// example runs</div>
     <h2>One prompt each, on a real Mac.</h2>
-    <p class="sub">Each clip is a single prompt to Claude with mx. The border marks the window mx works in, and the pill under it says what it is doing. Nothing was sent, posted or deleted.</p>
+    <p class="sub">Each clip is a single prompt to Claude with mx, recorded on the real screen: the windows where they were, mx's border and pill, and the wallpaper behind. Only the demo apps are captured. Nothing was sent, posted or deleted.</p>
     <div class="runs">
       <div class="framed" id="runbox">
         <div class="win"><video id="runvid" controls playsinline preload="metadata"></video><div class="soon" id="runsoon"></div></div>
         <span class="pill" id="runpill"><span class="spin"></span>mx · Working on it</span>
       </div>
       <ol class="runs-list" id="runlist">
-        <li><button type="button" data-v="brightness" data-pill="Brightness to 100%"><b>Brightness to 100%</b><span>"Set my display brightness to 100% and tell me what it was." Opens Displays in System Settings. The slider doesn't report its level, so it estimates about 47% from a screenshot, then steps it to the top.</span><i>System Settings · open, screenshot, batch</i></button></li>
-        <li><button type="button" data-v="appearance" data-pill="Light mode, then dark"><b>Light mode, then dark</b><span>"Switch my Mac to light mode, then back to dark." Opens Appearance, clicks Light, then Dark, and checks each with a screenshot.</span><i>System Settings · open, click, screenshot</i></button></li>
-        <li><button type="button" data-v="finder" data-pill="PDFs into Receipts"><b>PDFs into a Receipts folder</b><span>"Move the PDFs in ~/mx-demo/Downloads into a new folder called Receipts." Sorts by kind, selects the four PDFs, runs New Folder with Selection and names it Receipts.</span><i>Finder · menu, batch, key</i></button></li>
+        <li><button type="button" data-v="brightness" data-pill="Brightness to 100%"><b>Brightness to 100%</b><span>"Set my display brightness to 100% and tell me what it was." Opens Displays in System Settings. The slider doesn't report its level or take a typed value, so it reads about half from a screenshot (it was 52%), then steps it to the top.</span><i>System Settings · open, read, screenshot, batch</i></button></li>
+        <li><button type="button" data-v="appearance" data-pill="Light mode, then dark"><b>Light mode, then dark</b><span>"Switch my Mac to light mode, then back to dark." Opens Appearance, clicks Light, then Dark, and checks the result with a screenshot.</span><i>System Settings · open, click, screenshot</i></button></li>
+        <li><button type="button" data-v="finder" data-pill="PDFs into Receipts"><b>PDFs into a Receipts folder</b><span>"Move the PDFs in ~/mx-demo/Downloads into a new folder called Receipts." Makes a folder from the File menu. Finder's rename field is hidden from accessibility, so it pastes the name in, then drags the four PDFs over.</span><i>Finder · menu, clipboard, drag</i></button></li>
         <li><button type="button" data-v="textedit" data-pill="Draft a release note"><b>A release note, while you work</b><span>"Draft a short release note for mx 0.1 in TextEdit while I keep working." Background mode: a new document behind your window, the note filled in one step, never saved.</span><i>TextEdit · app, menu, fill</i></button></li>
-        <li><button type="button" data-v="menus" data-pill="Numbered list, bigger text"><b>A numbered list, from the menus</b><span>"In TextEdit, make this list a numbered list and make the text bigger, using the menus." Format &gt; List numbers it, then Format &gt; Font &gt; Bigger takes it from 12 to 18 pt.</span><i>TextEdit · menu, click</i></button></li>
-        <li><button type="button" data-v="watch" data-pill="1499 × 12, slowly"><b>1499 × 12, slowly</b><span>"Show me: work out 1499 × 12 in Calculator, slowly." Watch mode: the pointer glides to each key, the real mouse follows, and Calculator shows 17,988.</span><i>Watch mode · open, batch</i></button></li>
+        <li><button type="button" data-v="menus" data-pill="Numbered list, bigger text"><b>A numbered list, from the menus</b><span>"In TextEdit, make this list a numbered list and make the text bigger, using the menus." Format &gt; List numbers it, then Format &gt; Font &gt; Bigger takes it from 12 to 18 pt.</span><i>TextEdit · menu, click, key</i></button></li>
+        <li><button type="button" data-v="watch" data-pill="1499 × 12, slowly"><b>1499 × 12, slowly</b><span>"Show me: work out 1499 × 12 in Calculator, slowly." Watch mode: it clears the last answer, the pointer glides to each key and presses it, and Calculator shows 17,988.</span><i>Watch mode · open, click</i></button></li>
       </ol>
+    </div>
+  </section>
+
+  <section id="exec">
+    <div class="kicker">// mx = mac exec</div>
+    <h2>Like docker exec, but the container is your Mac.</h2>
+    <p class="sub"><code>docker exec</code> runs a command inside a container that's already running. mx does the same for the Mac you're already using. It doesn't spin up a clean VM or a remote desktop. It runs your agent's steps inside the apps you have open and signed in to, behind your windows or in front of you.</p>
+
+    <div class="exec">
+      <div class="cmp">
+        <div class="lbl">A container that's already running</div>
+        <pre><span class="c"># run a command inside it</span>
+docker exec -it api sh</pre>
+        <p>Same filesystem, same env, same state as the running process.</p>
+      </div>
+      <div class="cmp hi">
+        <div class="lbl">The Mac you're already using</div>
+        <pre><span class="c"># the agent calls mx tools</span>
+<span class="h">open</span>     ~/Downloads/receipt.pdf
+<span class="h">snapshot</span> app=Numbers
+<span class="h">fill</span>     e12 "Corner Bean Café"</pre>
+        <p>Same apps, same accounts, same files as yours. Nothing to sign in to again.</p>
+      </div>
     </div>
   </section>
 
@@ -462,7 +491,7 @@ title: Priya (DM) - Slack
 
   <div class="end">
     <div class="big">mx</div>
-    <p>For the whole Mac. One command to add it, or paste one prompt into your agent and let it set mx up.</p>
+    <p>mac exec, for the whole Mac. One command to add it, or paste one prompt into your agent and let it set mx up.</p>
     <div class="installer center"></div>
   </div>
 
@@ -488,7 +517,7 @@ title: Priya (DM) - Slack
   themeBtn.addEventListener("click", () => setTheme(THEMES[(THEMES.indexOf(themeBtn.textContent) + 1) % 3]));
 
   // Install tabs: a command per client, or a prompt any agent can follow
-  const PROMPT = `Install mx (npm package @facets-cloud/mx) for me. It's an MCP server that lets you drive the apps on my Mac through the accessibility API.
+  const PROMPT = `Install mx (mac exec, npm package @facets-cloud/mx) for me. It's an MCP server that lets you drive the apps on my Mac through the accessibility API.
 
 1. Add it for the app you're running in:
    - Claude Code: claude plugin marketplace add Facets-cloud/mx, then claude plugin install mx@mx (or, server only: claude mcp add -s user mx -- npx -y @facets-cloud/mx)
@@ -568,8 +597,11 @@ title: Priya (DM) - Slack
   runBtns.forEach((b) => b.addEventListener("click", () => pick(b, true)));
   pick(runBtns[0], false);
 
-  // The wordmark gets mx's border and pill, the way a window does when mx starts on it
-  setTimeout(() => document.getElementById("word").classList.add("on"), 400);
+  // The wordmark gets mx's border and pill, the way a window does when mx starts on it,
+  // then "mx" unfolds into "mac exec"
+  const word = document.getElementById("word");
+  setTimeout(() => word.classList.add("on"), 400);
+  setTimeout(() => word.classList.add("open"), 900);
 </script>
 </body>
 </html>
