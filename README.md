@@ -1,5 +1,7 @@
 # mx · mac exec
 
+[![scuffmark](https://scuffmark.facets.cloud/badge/mx.svg)](https://scuffmark.facets.cloud/c/mx)
+
 Like `docker exec`, but the container is your Mac. mx lets coding agents
 (Claude Code, Codex, Cursor, Claude Desktop) run their steps inside the Mac
 apps you already have open and signed in to, through the macOS accessibility
