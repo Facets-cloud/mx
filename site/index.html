@@ -376,17 +376,17 @@ docker exec -it api sh</pre>
         <pre><span class="c"># one line per control, 268 elements in 117 ms</span>
 e9  searchbox "Channel or user name"
 e14 row "general"
-e15 row "Priya"
+e15 row "Sam"
 e41 textarea "Message #general"
 e42 button "Send"   <span class="c"># needs confirm</span></pre>
-        <p>The agent acts by ref (<code>click e15</code>) or by role and name (<code>row "Priya"</code>), which waits up to 3 s for the element, so one <code>batch</code> can cross several screens.</p>
+        <p>The agent acts by ref (<code>click e15</code>) or by role and name (<code>row "Sam"</code>), which waits up to 3 s for the element, so one <code>batch</code> can cross several screens.</p>
       </div>
       <div class="cmp hi">
-        <div class="lbl">fill e9 "Priya", key down, key return</div>
-        <pre><span class="add">+ e60 row "Priya"</span>
+        <div class="lbl">fill e9 "Sam", key down, key return</div>
+        <pre><span class="add">+ e60 row "Sam"</span>
 <span class="del">- e14</span>
-<span class="h">~</span> e41 textarea "Message Priya"
-title: Priya (DM) - Slack
+<span class="h">~</span> e41 textarea "Message Sam"
+title: Sam (DM) - Slack
 <span class="c"># 3 steps, one call, Slack stayed behind your app</span></pre>
         <p>A diff instead of a new tree. Refs stay the same while an element stays on screen, so the agent rarely snapshots twice.</p>
       </div>
@@ -406,7 +406,7 @@ title: Priya (DM) - Slack
     <h2>Not one app. The whole Mac.</h2>
     <p class="sub">Native apps, Electron apps, and the parts of macOS that aren't apps at all.</p>
     <div class="uses">
-      <div class="use"><div class="tools"><code>snapshot</code><code>fill</code><code>key</code></div><h3>Any app with a window</h3><p>Native or Electron. mx turns on an Electron app's tree the first time it touches it.</p><q>reply to Priya's last message in Slack, show me first</q></div>
+      <div class="use"><div class="tools"><code>snapshot</code><code>fill</code><code>key</code></div><h3>Any app with a window</h3><p>Native or Electron. mx turns on an Electron app's tree the first time it touches it.</p><q>reply to Sam's last message in Slack, show me first</q></div>
       <div class="use"><div class="tools"><code>app system</code><code>fill</code></div><h3>Control Center</h3><p>Sliders read as percents and toggles as on or off. mx opens the panel when it's closed.</p><q>turn the volume down a bit</q></div>
       <div class="use"><div class="tools"><code>menu</code></div><h3>Menus</h3><p>Any command by its titles, such as View then Zoom In, without opening the menu where the app allows it.</p><q>export this note as a PDF</q></div>
       <div class="use"><div class="tools"><code>open</code><code>click</code></div><h3>System Settings</h3><p><code>settings:displays</code> and 18 other panes. Reading is free. Sensitive panes need your yes.</p><q>is my Mac set to sleep after 10 minutes?</q></div>
@@ -423,7 +423,7 @@ title: Priya (DM) - Slack
       <div class="mode hi">
         <div class="lbl">Default</div>
         <h3>Background</h3>
-        <div class="say">"get the details and send them to Priya"</div>
+        <div class="say">"get the details and send them to Sam"</div>
         <ul>
           <li>You keep typing in your own app.</li>
           <li>mx never raises the app it works in.</li>

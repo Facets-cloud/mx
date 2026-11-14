@@ -1027,7 +1027,7 @@ def close_scratch(c, w, path):
 
 def gate_word_checks(c):
     """The confirm keyword list through the hidden _debug_dangerous hook; no app involved."""
-    words = ["Restart…", "Shut Down…", "Log Out Priya…", "Sleep", "Erase All Content", "Reset",
+    words = ["Restart…", "Shut Down…", "Log Out Sam…", "Sleep", "Erase All Content", "Reset",
              "Uninstall", "Move to Trash", "Move to Bin", "Empty Trash", "Format Disk", "Force Quit"]
     text, _ = c.call("_debug_dangerous", labels=words + ["Formatting help", "Show Tab Bar", "Zoom In"])
     got = dict(line.rsplit(": ", 1) for line in text.splitlines())

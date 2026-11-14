@@ -57,7 +57,7 @@ again mid-session switches it.
   with a small spinner and the current step just below it (a pill at the
   bottom of the screen when the window is covered). Use this unless
   the user asks to see the work: "get the details from Slack and send them
-  to Priya" runs in the background.
+  to Sam" runs in the background.
 - `front`: the user wants to see it ("show me", "do it in front of me",
   "I want to see what's happening"). mx brings the app forward, keeps it
   there, and shows the window border plus its pointer with the step tag.
@@ -89,7 +89,7 @@ forward at once.
   "record this computer's screen") are always refused, even with confirm.
   Tell the user to answer them.
 - A user's explicit request to send a specific message to a specific person
-  ("send Priya the deploy summary") is approval for that one message. Draft
+  ("send Sam the deploy summary") is approval for that one message. Draft
   it, show the user the exact text and recipient in one line, then pass
   `confirm: true` only for that send.
 - Anything else that needs `confirm: true` (deleting, archiving, posting to
@@ -177,9 +177,9 @@ forward at once.
   the snapshot shows), then `key: "down"`, then `key: "return"` on the
   result row by role and name. Return on the filter box itself does
   nothing, so aim it at the row. As one batch:
-  `[{"action":"fill","role":"searchbox","name":"Channel or user name","text":"Priya"},`
+  `[{"action":"fill","role":"searchbox","name":"Channel or user name","text":"Sam"},`
   `{"action":"key","role":"searchbox","name":"Channel or user name","key":"down"},`
-  `{"action":"key","role":"row","name":"Priya","key":"return"}]`
+  `{"action":"key","role":"row","name":"Sam","key":"return"}]`
   Return on a row or a search box needs no confirm.
 - Slack's message box is a rich text field. If `fill` doesn't take, switch
   to `typing: "keys"`. Use `shift+return` for line breaks inside a message.
