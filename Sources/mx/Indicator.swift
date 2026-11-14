@@ -1,9 +1,14 @@
 // The session indicator: a rounded border around the target app's window, and in
 // background mode a small pill with a spinner and the step tag just below the window.
 // Both windows sit at the target window's depth (ordered just above it), so the user's
-// own windows cover them. When the target window is fully covered, minimized or gone,
-// the border hides and the pill moves to the bottom of the main screen.
-// A 10 Hz poll of the window list follows moves, resizes and z-order changes.
+// own windows cover them. The window server keeps a window's sheets and child windows
+// with it, so when one of those sticks out past the target's edge, the border goes just
+// below the target instead: above it, it would land over the sheet. When the target
+// window is fully covered, minimized or gone, the border hides and the pill moves to
+// the bottom of the main screen.
+// A 10 Hz poll of the window list follows moves, resizes and z-order changes. An AX
+// observer on the app's focused window moves the border to a new sheet, dialog or window
+// as soon as it takes focus, rather than at the next call.
 // Main thread only; Overlay drives it.
 import AppKit
 import QuartzCore
@@ -85,10 +90,14 @@ final class Indicator {
     private let radius: CGFloat = ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 26 ? 16 : 10
     private let gap: CGFloat = 3  // the ring sits this far outside the window's edge
     private let font = NSFont.systemFont(ofSize: 11, weight: .medium)
+    private var observer: AXObserver?
+    private var observedPid: pid_t?
 
     /// Starts tracking a window (nil: the session has no window, such as the system UI).
-    func track(_ id: CGWindowID?) {
+    /// With `pid`, follows that app's focused window from then on.
+    func track(_ id: CGWindowID?, follow pid: pid_t? = nil) {
         target = id
+        follow(pid)
         generation += 1  // a fade still running doesn't stop this session
         opaque()
         if timer == nil {
@@ -113,6 +122,7 @@ final class Indicator {
     func stop() {
         timer?.invalidate(); timer = nil
         target = nil; wave = nil
+        follow(nil)
         border?.orderOut(nil); waveWin?.orderOut(nil)
         opaque()
     }
@@ -145,16 +155,25 @@ final class Indicator {
         guard timer != nil else { return }
         let list = onScreenWindows()
         let me = getpid()
-        var frame: CGRect?, covered = true, directlyAbove = false
+        var frame: CGRect?, covered = true, below = false, inPlace = false
         if let target, let i = list.firstIndex(where: { $0.id == target }) {
-            frame = list[i].frame
+            let t = list[i]
+            frame = t.frame
             let above = list[..<i].filter { $0.pid != me && (0..<20).contains($0.layer) }.map(\.frame)
-            covered = isCovered(list[i].frame, by: above)
-            let mine = border.map { $0.windowNumber }
-            directlyAbove = i > 0 && list[i - 1].id == mine.map(CGWindowID.init)
+            covered = isCovered(t.frame, by: above)
+            // The app's windows right above the target: its sheets and child windows among them.
+            let run = list[..<i].reversed().prefix { $0.pid == t.pid || $0.pid == me }.filter { $0.pid == t.pid }
+            below = run.contains { !t.frame.contains($0.frame) }
+            let mine = border.map { CGWindowID($0.windowNumber) }
+            if below {
+                inPlace = i + 1 < list.count && list[i + 1].id == mine
+            } else if let j = list.firstIndex(where: { $0.id == mine }), j < i {
+                // Above the target, with at most the app's windows inside its frame in between.
+                inPlace = list[(j + 1)..<i].allSatisfy { $0.pid == me || ($0.pid == t.pid && t.frame.contains($0.frame)) }
+            }
         }
         if let frame, !covered {
-            showBorder(frame, reorder: !directlyAbove)
+            showBorder(frame, reorder: !inPlace, below: below)
         } else {
             border?.orderOut(nil)
         }
@@ -164,7 +183,7 @@ final class Indicator {
 
     // MARK: border
 
-    private func showBorder(_ f: CGRect, reorder: Bool) {
+    private func showBorder(_ f: CGRect, reorder: Bool, below: Bool) {
         let w = border ?? makeBorder()
         let outer = f.insetBy(dx: -gap, dy: -gap)
         if w.frame != outer {
@@ -175,7 +194,7 @@ final class Indicator {
                                cornerHeight: radius + gap - 1.25, transform: nil)
             CATransaction.commit()
         }
-        if reorder || !w.isVisible, let t = target { w.order(.above, relativeTo: Int(t)) }
+        if reorder || !w.isVisible, let t = target { w.order(below ? .below : .above, relativeTo: Int(t)) }
     }
 
     private func makeBorder() -> NSWindow {
@@ -231,11 +250,44 @@ final class Indicator {
         }
     }
 
-    /// True when w is right above t, or above the border that is right above t.
+    /// True when w is right above the border (wherever the border sits), or right above t
+    /// when the border is hidden.
     private func isDirectlyAbove(_ w: NSWindow, _ t: CGWindowID) -> Bool {
         let ids = onScreenWindows().map(\.id)
-        guard let i = ids.firstIndex(of: CGWindowID(w.windowNumber)), let j = ids.firstIndex(of: t) else { return false }
-        return i < j && ids[(i + 1)..<j].allSatisfy { $0 == border.map { CGWindowID($0.windowNumber) } }
+        let base = border.flatMap { $0.isVisible ? CGWindowID($0.windowNumber) : nil } ?? t
+        guard let i = ids.firstIndex(of: CGWindowID(w.windowNumber)), let j = ids.firstIndex(of: base) else { return false }
+        return i + 1 == j
+    }
+
+    // MARK: following the focused window
+
+    /// Watches app `pid` for focused-window changes (nil: stop), so the border moves to a
+    /// sheet or dialog the moment it takes focus, and back when it closes.
+    private func follow(_ pid: pid_t?) {
+        guard pid != observedPid else { return }
+        if let o = observer { CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(o), .commonModes) }
+        observer = nil
+        observedPid = pid
+        guard let pid else { return }
+        var o: AXObserver?
+        let made = AXObserverCreate(pid, { _, el, _, ref in
+            guard let ref else { return }
+            Unmanaged<Indicator>.fromOpaque(ref).takeUnretainedValue().focusMoved(el)
+        }, &o)
+        guard made == .success, let o else { return }
+        let app = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(app, 0.25)
+        AXObserverAddNotification(o, app, kAXFocusedWindowChangedNotification as CFString, Unmanaged.passUnretained(self).toOpaque())
+        CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(o), .commonModes)
+        observer = o
+    }
+
+    /// The followed app's focus moved to window `el`. Only retargets: a fade still running
+    /// (after done or the idle hide) carries on.
+    private func focusMoved(_ el: AXUIElement) {
+        guard timer != nil, let id = windowID(el), id != target else { return }
+        target = id
+        tick()
     }
 
     private func makeWave() -> NSWindow {

@@ -202,8 +202,10 @@ final class Tools {
         let scope = system ? .system : scopeArg ?? st.scope ?? (app.activationPolicy == .regular ? .window : .app)
         let ctx = Ctx(app: app, appEl: appEl, st: st, windowQuery: args["window"] as? String, scope: scope)
         current = app
-        // The border follows the window the call acts on; the system UI has none.
-        Overlay.shared.track(system ? nil : (try? resolveWindow(appEl, ctx.windowQuery)).flatMap(windowID))
+        // The border follows the window the call acts on; the system UI has none. Without a
+        // window query it also follows the app's focus to a sheet or dialog between calls.
+        Overlay.shared.track(system ? nil : (try? resolveWindow(appEl, ctx.windowQuery)).flatMap(windowID),
+                             follow: system || ctx.windowQuery?.isEmpty == false ? nil : pid)
         // Front and watch modes keep the session's app in front, including when it moves to another app.
         if mode.inFront, ctx.regular, !activate(app) {
             throw MXError("could not bring \(app.localizedName ?? "the app") to the front")

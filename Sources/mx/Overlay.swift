@@ -122,10 +122,11 @@ final class Overlay {
     private var expiry: DispatchWorkItem?
 
     /// The session's target window, for the border (nil: no window, such as the system UI).
-    func track(_ id: CGWindowID?) {
+    /// With `follow`, the border moves with that app's focused window until the next track.
+    func track(_ id: CGWindowID?, follow pid: pid_t? = nil) {
         DispatchQueue.main.async {
             if self.closed { return }
-            self.indicator.track(id)
+            self.indicator.track(id, follow: pid)
             self.armIdleHide()
         }
     }
