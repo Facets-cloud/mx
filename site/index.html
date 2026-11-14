@@ -85,6 +85,23 @@
   .installer .btn { background: #222226; color: #f1f1ef; border-color: #2e2e33; }
   .installer .hint { padding: 0 18px 12px; font-size: 13px; color: #77776f; }
 
+  /* Horizontal scrollers (install tabs, commands, code): fade the edge that has more beyond it */
+  @property --fade-start { syntax: "<length>"; inherits: false; initial-value: 0px; }
+  @property --fade-end { syntax: "<length>"; inherits: false; initial-value: 0px; }
+  .installer .tabs, .installer pre:not(.prompt), .cmp pre {
+    --fade-size: 2.5rem;
+    scroll-padding-inline: var(--fade-size);
+    mask:
+      linear-gradient(black, black) no-clip subtract,
+      linear-gradient(to right, black, transparent) 0 0 / var(--fade-start) 100% no-repeat no-clip,
+      linear-gradient(to right, transparent, black) 100% 0 / var(--fade-end) 100% no-repeat no-clip;
+    animation: reveal-fade-start linear both, hide-fade-end linear both;
+    animation-timeline: scroll(self inline);
+    animation-range: 0 var(--fade-size), calc(100% - var(--fade-size)) 100%;
+  }
+  @keyframes reveal-fade-start { to { --fade-start: var(--fade-size); } }
+  @keyframes hide-fade-end { from { --fade-end: var(--fade-size); } }
+
   /* Video frames: a window with mx's border, the pill under it */
   .framed { position: relative; padding-bottom: 40px; }
   .framed .win { position: relative; border-radius: 14px; overflow: hidden; background: #0d0d10; aspect-ratio: 16 / 9; outline: 2.5px solid var(--acc); outline-offset: 3px; box-shadow: 0 30px 80px -20px rgba(0,0,0,.35); }
@@ -183,6 +200,8 @@
   .vars td:first-child { padding-right: 14px; white-space: nowrap; }
   .vars td code { font-size: 13px; color: var(--fg); }
   .vars p { margin-top: 12px; font-size: 14px; color: var(--muted); }
+  .vars thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .vars p.vars-k { margin: 0 0 10px; font: 500 12px "JetBrains Mono", monospace; color: var(--faint); text-transform: uppercase; letter-spacing: .08em; }
   .settings .installer { margin-top: 0; max-width: none; }
 
   /* Setup */
@@ -246,7 +265,21 @@
     .desk .target { width: 72%; height: 200px; }
     .desk .yours { width: 46%; top: 120px; height: 150px; }
     .desk .pill { left: calc(6% + 36%); top: 256px; }
-    .desk figcaption { right: 16px; }
+    /* the caption goes under the windows instead of over the pill */
+    .desk { height: auto; padding: 302px 16px 16px; }
+    .desk figcaption { position: static; }
+    /* narrow windows: title right of the traffic lights, not under them */
+    .desk .w .t { left: 62px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; right: 10px; }
+    /* commands get the full width; Copy goes under them */
+    .installer .body { flex-wrap: wrap; padding: 12px; }
+    .installer pre { flex-basis: 100%; font-size: 11.5px; }
+    .cmp pre { font-size: 12.5px; }
+    .installer .body .btn { margin-left: auto; }
+    /* settings table stacks: each variable above its description */
+    .vars table, .vars tbody, .vars tr, .vars td { display: block; }
+    .vars thead { display: none; }
+    .vars td:first-child { padding-bottom: 2px; }
+    .vars td + td { border-top: 0; padding-top: 0; }
   }
   @media (prefers-reduced-motion: reduce) {
     .spin, .desk .yours .caret { animation: none; }
@@ -429,8 +462,9 @@ title: Priya (DM) - Slack
     <div class="settings">
       <div class="vars">
         <p style="margin:0 0 14px;font-size:16px;color:var(--fg)"><b>Just ask your agent.</b> "Show me", "let me watch", "this box ignores pasted text": the agent sets the mode for that job. Nothing to configure.</p>
+        <p class="vars-k">For power users: what mx does when the agent doesn't say</p>
         <table>
-          <tr><th>Default</th><th>For power users: what mx does when the agent doesn't say</th></tr>
+          <thead><tr><th>Setting</th><th>Default and choices</th></tr></thead>
           <tr><td><code>MX_MODE</code></td><td><code>background</code> (default), <code>front</code> or <code>watch</code>.</td></tr>
           <tr><td><code>MX_TYPING</code></td><td><code>paste</code> (default) puts text in at once. <code>keys</code> types key by key, for chat boxes and autocompletes that ignore pasted text.</td></tr>
         </table>
@@ -451,11 +485,11 @@ title: Priya (DM) - Slack
   </section>
 
   <section id="tools">
-    <div class="kicker">// 17 tools</div>
+    <div class="kicker">// 19 tools</div>
     <h2>Everything you'd do with the keyboard and mouse.</h2>
     <p class="sub">Snapshot, act by ref or by role and name, read the diff. <code>batch</code> runs a whole plan in one call and stops at the first failure.</p>
     <div class="tools-grid">
-      <div class="group"><h3>Session <span>2</span></h3><ul><li>start</li><li>done</li></ul></div>
+      <div class="group"><h3>Session <span>4</span></h3><ul><li>start</li><li>done</li><li>history</li><li>settings</li></ul></div>
       <div class="group"><h3>Read <span>4</span></h3><ul><li>list_apps</li><li>snapshot</li><li>read</li><li>screenshot</li></ul></div>
       <div class="group"><h3>Act <span>6</span></h3><ul><li>click</li><li>fill</li><li>key</li><li>batch</li><li>scroll</li><li>drag</li></ul></div>
       <div class="group mac"><h3>The rest of the Mac <span>5</span></h3><ul><li>menu</li><li>window</li><li>app</li><li>open</li><li>clipboard</li></ul></div>
