@@ -43,6 +43,11 @@ func isSubmitKey(_ k: KeyCombo) -> Bool {
     (k.code == 36 || k.code == 76) && k.flags != .maskShift
 }
 
+/// cmd+c or cmd+x: the app writes to the clipboard.
+func isCopyKey(_ k: KeyCombo) -> Bool {
+    (k.code == 8 || k.code == 7) && k.flags == .maskCommand
+}
+
 /// Posts to the pid, or with hid through the HID tap, which reaches the frontmost app's key
 /// window (needed for open and save panels the panel service draws; see isRemotePanel).
 func post(_ k: KeyCombo, to pid: pid_t, hid: Bool = false) {

@@ -74,6 +74,10 @@ final class Tools {
     private var borrowNotes: [String] = []
     /// Where the current call acted, for its audit log line (Audit.swift).
     var audit = AuditCall()
+    /// Where the user's cursor was before watch mode first moved it; put back at done.
+    private var watchCursor: CGPoint?
+    /// The user's clipboard while mx has written to it this session; put back at done.
+    var savedClipboard: SavedClipboard?
     /// Self-test only: `_fake_idle_ms` on a call stands in for the user's idle time.
     private var fakeIdleMs: Double?
 
@@ -145,7 +149,7 @@ final class Tools {
         }
         let newTitle = (args["title"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         let continuing = title != nil
-        if let m { mode = m }
+        if let m { if m != .watch { releaseCursor() }; mode = m }
         if let t { typing = t }
         // Switching to front or watch mid-session brings the app forward now, not at the next step.
         if continuing, mode.inFront, let app = current, !activate(app) {
@@ -164,8 +168,9 @@ final class Tools {
     private func done(_ args: [String: Any]) -> String {
         let summary = args["summary"] as? String ?? ""
         let secs = started.map { now() - $0 } ?? 0
-        let result = String(format: "done in %.1fs with %d action%@", secs, actions, actions == 1 ? "" : "s")
+        let result = String(format: "done in %.1fs with %d action%@", secs, actions, actions == 1 ? "" : "s") + restoreUserClipboard()
         Overlay.shared.finish("Done: \(summary.isEmpty ? (title ?? "") : summary)", pointer: mode.inFront)
+        releaseCursor()
         started = nil; title = nil; actions = 0
         mode = envDefault("MX_MODE", Mode.background); typing = envDefault("MX_TYPING", Typing.paste)
         return result
@@ -367,11 +372,14 @@ final class Tools {
         var mayOpenPanel = ctx.scope == .system && !["menubaritem", "menuitem", "axmenubaritem", "axmenuitem"].contains(role.lowercased())
         let deadline = now() + 3
         repeat {
-            let nodes = try ctx.nodes().filter { $0.depth > 0 && roleMatches($0, role) }
-            if let n = nodes.first(where: { $0.name.lowercased() == name })
-                ?? nodes.first(where: { !name.isEmpty && $0.name.lowercased().contains(name) }) {
-                return n
-            }
+            let all = try ctx.nodes()
+            let sheets = sheetDepths(all)
+            let hits = all.indices.filter { all[$0].depth > 0 && roleMatches(all[$0], role) }
+            let exact = hits.filter { all[$0].name.lowercased() == name }
+            let pool = !exact.isEmpty || name.isEmpty ? exact : hits.filter { all[$0].name.lowercased().contains(name) }
+            // A sheet blocks the window under it, so the match in the innermost sheet wins:
+            // textbox "" is Go to Folder's field, not an unnamed field of the document (ties keep tree order).
+            if let i = pool.max(by: { sheets[$0] < sheets[$1] }) { return all[i] }
             if mayOpenPanel {
                 mayOpenPanel = false
                 if try openControlCenter() { borrowNotes.append("(mx opened Control Center first)"); continue }
@@ -394,7 +402,18 @@ final class Tools {
         }
         guard mode == .watch else { Overlay.shared.act(say(verb), at: frame, click: click); return }
         let g = Overlay.shared.act(say(verb), at: frame, click: click, glide: true, aim: frame.map(nearCenter))
-        if let g { usleep(UInt32(g.seconds * 1e6)) }
+        if let g { holdCursor(); g.moveMouse() }  // the real mouse follows the pointer, for as long as the glide
+    }
+
+    /// Watch mode: remembers the user's cursor before mx first moves it, for done to put back.
+    private func holdCursor() {
+        if watchCursor == nil { watchCursor = CGEvent(source: nil)?.location }
+    }
+
+    /// Puts the cursor back where watch mode found it.
+    func releaseCursor() {
+        if let p = watchCursor { CGWarpMouseCursorPosition(p) }
+        watchCursor = nil
     }
 
     /// A step that moves the real mouse. In background mode the pointer shows only during a
@@ -451,6 +470,7 @@ final class Tools {
             let confirm = args["confirm"] as? Bool ?? false
             try settingsGate(ctx, n.el, "fill \(describe(n))", confirm: confirm)
             if n.role == "AXSlider" || n.role == "AXIncrementor" { return try setLevel(n, text) }
+            if let url = finderItemURL(ctx, n) { return try renameFinderItem(n, url, text) }
             return typing == .keys ? try typeInto(ctx, n, text, confirm: confirm) : try fill(n, text)
         case "key":
             guard let combo = args["key"] as? String else { throw MXError("key needs key, such as cmd+k or return") }
@@ -487,6 +507,14 @@ final class Tools {
             let p = try mouseClick(ctx, n, label, right: right, count: count)
             actions += 1
             return what + " (\(right ? "right-" : "")\(count > 1 ? "double-" : "")clicked at \(Int(p.x)),\(Int(p.y)))"
+        }
+        // Watch mode presses with the real mouse, so the user sees their cursor do it; AXPress
+        // stays the fallback when the element can't be hit (covered or off screen). Menu items
+        // have no window to hit-test against, so they keep AXPress.
+        if mode == .watch && action == "press" && !["AXMenuItem", "AXMenuBarItem"].contains(n.role),
+           let p = try? mouseClick(ctx, n, label) {
+            actions += 1
+            return what + " (clicked at \(Int(p.x)),\(Int(p.y)) with the real mouse)"
         }
         var how = ""
         if actionNames(n.el).contains(axAction) {
@@ -551,7 +579,8 @@ final class Tools {
         let verb = "Click \u{201C}\(label.prefix(40))\u{201D}"
         let spot = CGRect(x: p.x - 1, y: p.y - 1, width: 2, height: 2)
         if mode == .watch {
-            // The real mouse travels the overlay's arc, then presses with a short hold, and stays there.
+            // The real mouse travels the overlay's arc, then presses with a short hold, and stays there until done.
+            holdCursor()
             Overlay.shared.act(say(verb), at: spot, click: true, glide: true, aim: p)?.moveMouse()
             postMouseClick(at: p, right: right, count: count, hold: 70_000)
             return p
@@ -596,6 +625,37 @@ final class Tools {
         return "filled \(displayRole(n)) with \(text.count) characters"
     }
 
+    /// The file behind a Finder item (an icon in icon view, a name cell in list view): Finder
+    /// gives them AXFilename and AXURL. The path bar has AXURL too, but no AXFilename.
+    private func finderItemURL(_ ctx: Ctx, _ n: Node) -> URL? {
+        guard isFinder(name: ctx.name, bundle: ctx.app.bundleIdentifier),
+              let name = copyAttr(n.el, kAXFilenameAttribute) as? String, !name.isEmpty,
+              let ref = copyAttr(n.el, kAXURLAttribute) as? URL else { return nil }
+        return (ref as NSURL).filePathURL
+    }
+
+    /// fill on a Finder item renames its file, in the same folder, never over another file.
+    /// Finder's own rename field exists only while Finder is in front and closes when the
+    /// front is handed back, and setting a list view name cell changes only the text on screen.
+    private func renameFinderItem(_ n: Node, _ url: URL, _ name: String) throws -> String {
+        guard !name.isEmpty, !name.contains("/"), !name.contains(":"), name != ".", name != ".." else {
+            throw MXError("a file name can't be empty, . or .., or contain / or :")
+        }
+        let old = url.lastPathComponent, folder = url.deletingLastPathComponent()
+        let dest = folder.appendingPathComponent(name)
+        if name == old { return "\(quote(old, 60)) already has that name" }
+        // A change of case only is the same file on a case-insensitive disk.
+        if FileManager.default.fileExists(atPath: dest.path) && name.lowercased() != old.lowercased() {
+            throw MXError("\(quote(name, 60)) already exists in \(folder.path); not renaming over it")
+        }
+        show("Rename to \u{201C}\(name.prefix(40))\u{201D}", at: liveFrame(n.el))
+        do { try FileManager.default.moveItem(at: url, to: dest) } catch {
+            throw MXError("could not rename \(quote(old, 60)): \(error.localizedDescription)")
+        }
+        actions += 1
+        return "renamed \(quote(old, 60)) to \(quote(name, 60)) in \(folder.path)"
+    }
+
     /// Posts a key combo to the app after making the target window its key window, and
     /// refuses if it cannot, so keys never land in some other window of the app. Return or
     /// enter into a text input (the target, else the focused element) needs confirm.
@@ -618,7 +678,10 @@ final class Tools {
         if needsFront(k) || panel { try needFront(ctx, "shortcut") }
         if panel { try checkPanelKeys(ctx) }
         show("Press \(combo)", at: (n?.el ?? focused).flatMap(liveFrame))
+        let copies = isCopyKey(k)
+        if copies { saveUserClipboard() }
         post(k, to: ctx.app.processIdentifier, hid: panel)
+        if copies { awaitClipboardWrite() }
         actions += 1
         return "pressed \(combo)"
     }

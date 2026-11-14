@@ -217,6 +217,17 @@ func displayRole(_ n: Node) -> String {
     return n.role.hasPrefix("AX") ? String(n.role.dropFirst(2)).lowercased() : n.role.lowercased()
 }
 
+/// How many sheets enclose each node, for nodes in walk order (parents before children).
+func sheetDepths(_ nodes: [Node]) -> [Int] {
+    var open: [(depth: Int, sheet: Bool)] = []
+    return nodes.map { n in
+        while let top = open.last, top.depth >= n.depth { open.removeLast() }
+        let d = open.filter(\.sheet).count
+        open.append((n.depth, n.role == "AXSheet"))
+        return d
+    }
+}
+
 func roleMatches(_ n: Node, _ role: String) -> Bool {
     let r = role.lowercased()
     return displayRole(n) == r || n.role.lowercased() == r || n.subrole.lowercased() == r

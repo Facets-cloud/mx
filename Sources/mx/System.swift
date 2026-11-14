@@ -335,6 +335,13 @@ func appURL(_ name: String) -> URL? {
 
 // MARK: - Tools
 
+/// The clipboard as mx found it (each item's types and data, in order), and the
+/// changeCount right after mx's latest write.
+struct SavedClipboard {
+    let items: [[(NSPasteboard.PasteboardType, Data)]]
+    var count: Int
+}
+
 extension Tools {
     /// The confirm and refusal gates for click: permission prompts (refused even with
     /// confirm), send/delete/restart-style labels, and sensitive System Settings panes.
@@ -686,12 +693,48 @@ extension Tools {
             return pb.string(forType: .string) ?? "(the clipboard holds no text)"
         case "set":
             guard let text = args["text"] as? String else { throw MXError("clipboard set needs text") }
+            let keep = args["keep"] as? Bool ?? false
+            if !keep { saveUserClipboard() }
             pb.clearContents()
             pb.setString(text, forType: .string)
             actions += 1
-            return "set the clipboard to \(text.count) characters"
+            if keep { savedClipboard = nil; return "set the clipboard to \(text.count) characters (kept after done)" }
+            savedClipboard?.count = pb.changeCount
+            return "set the clipboard to \(text.count) characters (the user's clipboard comes back at done)"
         default: throw MXError("clipboard op is get or set")
         }
+    }
+
+    /// Saves the user's clipboard, every item and type, before mx's first write to it in a session.
+    func saveUserClipboard() {
+        guard savedClipboard == nil else { return }
+        let pb = NSPasteboard.general
+        let items = (pb.pasteboardItems ?? []).map { item in item.types.compactMap { t in item.data(forType: t).map { (t, $0) } } }
+        savedClipboard = SavedClipboard(items: items, count: pb.changeCount)
+    }
+
+    /// After cmd+c or cmd+x: waits up to 0.5 s for the app's write, then counts it as mx's.
+    func awaitClipboardWrite() {
+        guard savedClipboard != nil else { return }
+        let deadline = now() + 0.5
+        while NSPasteboard.general.changeCount == savedClipboard!.count && now() < deadline { usleep(20_000) }
+        savedClipboard!.count = NSPasteboard.general.changeCount
+    }
+
+    /// Puts the user's clipboard back at the end of a session. Leaves it alone when something
+    /// other than mx wrote to it after mx's latest write: the user copied something new.
+    func restoreUserClipboard() -> String {
+        guard let saved = savedClipboard else { return "" }
+        savedClipboard = nil
+        let pb = NSPasteboard.general
+        guard pb.changeCount == saved.count else { return "; left the clipboard as is, since it changed after mx's last write" }
+        pb.clearContents()
+        pb.writeObjects(saved.items.map { pairs in
+            let item = NSPasteboardItem()
+            for (t, d) in pairs { item.setData(d, forType: t) }
+            return item
+        })
+        return "; put the user's clipboard back"
     }
 
     // MARK: scroll and drag

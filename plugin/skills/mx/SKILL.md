@@ -149,13 +149,23 @@ forward at once.
   (and under their window). To save to a folder, after `key cmd+s` run one
   batch: fill textbox "Save As:" with the name, key cmd+shift+g, fill
   role textbox, name "" (the Go to Folder field) with the path, key return,
-  click button "Save". Return needs no confirm in these panels. Don't
-  scroll the file list looking for a folder: go to it by path.
+  read textbox "Save As:", read popup "Where:". Check that both read back
+  the name and folder you asked for, then click button "Save" (fix them
+  first if not). Return needs no confirm in these panels. Don't scroll the
+  file list looking for a folder: go to it by path.
+- Finder renames: `fill` on an item renames its file (image "untitled
+  folder" in icon view, or its name textbox's ref in list view), with the
+  full name and extension. Finder's own rename field closes as soon as
+  Finder leaves the front, so don't press return and type. New folder:
+  menu File > New Folder, then fill image "untitled folder" with the name.
 - `scroll(app, ref, direction, amount)` scrolls by pages. Without a
   direction it brings the element into view. `drag(app, from, to)` takes
   refs or `{x, y}` points, such as a window's title bar.
-- `clipboard set` puts text on the clipboard. `clipboard get` needs
-  confirm, since it can hold a password.
+- `clipboard set` puts text on the clipboard, for pasting. mx saves the
+  user's clipboard before its first write (set, key cmd+c or cmd+x) and puts
+  it back at `done`, unless the user copied something since. Pass
+  `keep: true` when the user asked for the text on their clipboard.
+  `clipboard get` needs confirm, since it can hold a password.
 
 ## Electron apps (Slack and others)
 

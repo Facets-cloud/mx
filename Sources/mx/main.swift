@@ -83,7 +83,8 @@ let toolList: [[String: Any]] = [
     ["name": "fill", "description": "Set the text of a text field or text area (replaces what is there), or the level of a slider: " +
         "\"75%\" (or 75 on a 0-1 slider) of its range, \"+10%\" or \"-10%\" from where it is, or a value in its own range; the result reads the level back. Returns what changed. " +
         "With typing=keys (see start) the text is typed key by key, and text with a newline is refused unless confirm is true, " +
-        "since a typed newline is a Return that can send.",
+        "since a typed newline is a Return that can send. " +
+        "On a Finder item (its image in icon view, its name textbox in list view) fill renames the file, in the background; give the full name with any extension.",
      "inputSchema": obj(target(["text": str("The text."),
                                 "confirm": bool("With typing=keys: required for text containing a newline. Ask the user before passing true.")]), ["app", "text"])],
     ["name": "key", "description": "Press a key or combination in the app's window, such as cmd+k, shift+tab, return, escape, down or a single letter. " +
@@ -94,7 +95,7 @@ let toolList: [[String: Any]] = [
         "ask the user before you pass it. shift+return, other keys, and return in a search or filter box need no confirm. " +
         "Save and Open panels: fill textbox \"Save As:\" with the name; to pick a folder, key cmd+shift+g, fill the textbox it shows " +
         "(role textbox, name \"\") with a path such as ~/Documents, then key return (no confirm in these panels); one batch can do it all, " +
-        "ending with click button \"Save\".",
+        "ending with read textbox \"Save As:\" and read popup \"Where:\". Check both, then click button \"Save\".",
      "inputSchema": obj(target(["key": str("Key or combination, such as cmd+a or return, or a hardware key such as volume_up."), "confirm": keyConfirmArg]), ["key"])],
     ["name": "screenshot", "description": "PNG of the app's window, the whole main display (full), or one element (at most 1280 px wide). " +
         "Works with the app in the background. With marks (default), every interactive element of the window has a thin box " +
@@ -136,8 +137,11 @@ let toolList: [[String: Any]] = [
      "inputSchema": obj(["app": appArg, "window": windowArg, "scope": scopeArg,
                          "from": ["description": "A ref or {\"x\": .., \"y\": ..}."], "to": ["description": "A ref or {\"x\": .., \"y\": ..}."]],
                         ["app", "from", "to"])],
-    ["name": "clipboard", "description": "get or set the clipboard's text. get needs confirm, because the clipboard can hold a password.",
+    ["name": "clipboard", "description": "get or set the clipboard's text. get needs confirm, because the clipboard can hold a password. " +
+        "set (and key cmd+c or cmd+x) is for pasting: mx saves the user's clipboard first and puts it back at done, " +
+        "unless the user copied something since. Pass keep=true when the user asked for the text on their clipboard.",
      "inputSchema": obj(["op": ["type": "string", "enum": ["get", "set"]], "text": str("For set."),
+                         "keep": bool("For set: leave the text on the clipboard after done, because the user asked for it there."),
                          "confirm": bool("Required for get. Ask the user first.")], ["op"])],
     ["name": "batch", "description": "Run several click, fill, key and read steps on one app in one call, in order; each waits for the window to settle. " +
         "Snapshot first, then send the steps you would otherwise send one by one. Use role and name for elements on later screens. " +
@@ -264,7 +268,7 @@ Thread {
     // running, then exit once that call ends (so a borrow still hands the front back),
     // or after 5 s if it never does.
     Overlay.shared.close()
-    calls.async { auditQueue.sync {}; exit(0) }
+    calls.async { tools.releaseCursor(); _ = tools.restoreUserClipboard(); auditQueue.sync {}; exit(0) }
     DispatchQueue.main.asyncAfter(deadline: .now() + 5) { exit(0) }
 }.start()
 

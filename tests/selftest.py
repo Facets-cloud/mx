@@ -200,6 +200,7 @@ def protocol_checks():
     diff_checks(c)
     mode_arg_checks(c)
     gate_word_checks(c)
+    clipboard_checks(c)
     c.close()
 
     e = Client(env={"MX_MODE": "watch", "MX_TYPING": "keys"})
@@ -227,6 +228,30 @@ def protocol_checks():
     check("untrusted: list_apps still works", not is_err and "pid=" in text, text)
     u.close()
     cli_checks()
+
+
+def pbpaste():
+    return subprocess.run(["pbpaste"], capture_output=True, text=True).stdout
+
+
+def clipboard_checks(c):
+    """clipboard set is for pasting: done puts the user's clipboard back, unless the user
+    copied something since, or keep=true. Ends with the user's text back on the clipboard."""
+    mine = pbpaste()
+    c.call("start", title="clipboard")
+    c.call("clipboard", op="set", text="mx selftest paste")
+    text, _ = c.call("done", summary="clipboard")
+    check("clipboard: done puts the user's clipboard back", pbpaste() == mine and "clipboard back" in text, text)
+    c.call("start", title="clipboard")
+    c.call("clipboard", op="set", text="mx selftest paste")
+    subprocess.run(["pbcopy"], input="mx selftest user copy", text=True)
+    text, _ = c.call("done", summary="clipboard")
+    check("clipboard: a copy made after mx's write is left alone", pbpaste() == "mx selftest user copy", text)
+    c.call("start", title="clipboard")
+    c.call("clipboard", op="set", text="mx selftest keep", keep=True)
+    c.call("done", summary="clipboard")
+    check("clipboard: keep=true leaves the text after done", pbpaste() == "mx selftest keep", pbpaste())
+    subprocess.run(["pbcopy"], input=mine, text=True)  # text only: the checks above never saved more than that
 
 
 def cli_checks():
