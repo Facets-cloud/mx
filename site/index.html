@@ -192,6 +192,13 @@
   .desk .pill { position: absolute; left: calc(6% + 25%); top: 286px; transform: translateX(-50%); }
   .desk figcaption { position: absolute; left: 16px; bottom: 12px; font-size: 13.5px; color: var(--muted); }
 
+  .tree { margin-top: 40px; background: var(--term); color: var(--termfg); border: 1px solid var(--line); border-radius: 16px; padding: 22px 24px; overflow-x: auto; }
+  .tree pre { margin: 0; font: 13.5px/1.65 "JetBrains Mono", monospace; white-space: pre; }
+  .tree .c { color: #8a8a82; }
+  .tree .bad { color: #ff7070; }
+  .tree .ok { color: #5fd38d; }
+  .tree .t { color: #7aa2ff; }
+  .settings.hist { grid-template-columns: 1fr 1fr; }
   .settings { margin-top: 16px; display: grid; grid-template-columns: 1fr 1.25fr; gap: 16px; align-items: start; }
   .vars { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 22px 24px; }
   .vars table { width: 100%; border-collapse: collapse; font-size: 15px; }
@@ -248,7 +255,7 @@
   footer a { color: var(--muted); text-decoration: none; margin-left: 18px; }
 
   @media (max-width: 900px) {
-    .hero .wrap, .exec, .runs, .modes, .settings, .steps { grid-template-columns: 1fr; }
+    .hero .wrap, .exec, .runs, .modes, .settings, .settings.hist, .steps { grid-template-columns: 1fr; }
     .uses, .tools-grid, .stats { grid-template-columns: repeat(2, 1fr); }
     .trust { grid-template-columns: 1fr; }
     .chain { grid-template-columns: 1fr; }
@@ -274,6 +281,8 @@
     .installer .body { flex-wrap: wrap; padding: 12px; }
     .installer pre { flex-basis: 100%; font-size: 11.5px; }
     .cmp pre { font-size: 12.5px; }
+    .tree { padding: 16px; }
+    .tree pre { font-size: 11.5px; }
     .installer .body .btn { margin-left: auto; }
     /* settings table stacks: each variable above its description */
     .vars table, .vars tbody, .vars tr, .vars td { display: block; }
@@ -291,7 +300,7 @@
 <nav>
   <div class="wrap">
     <a class="mark" href="#">mx</a>
-    <div class="links"><a class="opt" href="#runs">Runs</a><a class="opt" href="#exec">How it works</a><a class="opt" href="#modes">Modes</a><a class="opt" href="#safety">Safety</a><a href="#setup">Setup</a><a href="https://github.com/Facets-cloud/mx">GitHub</a><button class="theme" id="theme" type="button" aria-label="Switch theme">auto</button></div>
+    <div class="links"><a class="opt" href="#runs">Runs</a><a class="opt" href="#exec">How it works</a><a class="opt" href="#modes">Modes</a><a class="opt" href="#safety">Safety</a><a class="opt" href="#history">History</a><a href="#setup">Setup</a><a href="https://github.com/Facets-cloud/mx">GitHub</a><button class="theme" id="theme" type="button" aria-label="Switch theme">auto</button></div>
   </div>
 </nav>
 
@@ -472,6 +481,42 @@ title: Sam (DM) - Slack
         <p>Set these where your agent starts mx, then restart the agent. What the agent passes to <code>start</code> wins.</p>
       </div>
       <div class="installer" data-set="modes"></div>
+    </div>
+  </section>
+
+  <section id="history">
+    <div class="kicker">// history</div>
+    <h2>Ask what it did. Get the whole session.</h2>
+    <p class="sub">mx logs every action on your Mac, one file per agent session. Inside Claude Code or Codex that's the app's own conversation, so you can jump back to it. Ask your agent "what did mx do in my last session?" and it calls <code>history</code>, which draws the session from start to end: each task, the apps and windows it worked in, and every action with its result. Refusals and confirmations get their own lines.</p>
+    <div class="tree"><pre><span class="c">mx-7d41c2e09a5b  claude-code  mx  Nov 14 09:00:00-09:00:09  "Reply to Sam"  5 actions, 1 failed, 1 refused  Slack
+resume: claude --resume 5e0c1a7b-2f4d-4c8e-9b61-0d3f7a2e8c45</span>
+└─ <span class="t">"Reply to Sam"</span>  09:00:00-09:00:09  5 actions, 1 failed, 1 refused  done: "Replied to Sam"
+   └─ Slack · "Sam (DM) - Acme - Slack"
+      ├─ 09:00:01  snapshot  ok 120ms
+      ├─ 09:00:02  fill textarea "Message to Sam" text (24 chars)  ok 40ms
+      ├─ 09:00:03  key return in textarea "Message to Sam"  <span class="bad">REFUSED (send gate)</span>
+      ├─ 09:00:05  key return in textarea "Message to Sam"  <span class="ok">[confirmed]</span>  ok 300ms  (borrowed front 210ms)
+      └─ 09:00:07  click button "Huddle"  <span class="bad">FAILED: no button "huddle" appeared in Slack within 3s</span></pre></div>
+    <div class="settings hist">
+      <div class="vars">
+        <p class="vars-k">What's logged</p>
+        <table>
+          <tr><td>Logged</td><td>Time, the app and window, the action and its target by role and name, the window it opened, the mode, the result and how long it took. Every confirm and every refusal, with the rule that stopped it.</td></tr>
+          <tr><td>Left out</td><td>What was typed. A fill or clipboard write shows the field and the length, never the text. <code>open</code> URLs are logged without the part after <code>?</code> or <code>#</code>, where tokens travel. <code>mx config set log.values full</code> logs text for debugging; <code>off</code> also drops window titles and names. Only you can change this, never the agent.</td></tr>
+          <tr><td>Where</td><td>Only on your Mac, readable only by you. Nothing is sent anywhere.</td></tr>
+          <tr><td>Pin it</td><td>"Pin that as Expenses" saves the task. Later, "do the Expenses pin for this month's receipts" and the agent follows its steps app by app, asking you only for the values. Elements are logged by name, <code>button "Save"</code>, so the steps still make sense next month. Pins are never deleted.</td></tr>
+        </table>
+      </div>
+      <div class="vars">
+        <p class="vars-k">How long it's kept</p>
+        <table>
+          <tr><td>Why size, not age</td><td>One action is about 250 bytes. An agent doing 2,000 actions a day writes about 185 MB a year, so 2 GB lasts around ten years. Logs are kept until they get big, not until they get old.</td></tr>
+          <tr><td>Recent</td><td>Plain files, up to 2 GB in total, about 8 million actions. Listing 800,000 logged actions takes 30 ms.</td></tr>
+          <tr><td>Older</td><td>Past 2 GB, the oldest sessions are gzipped, up to 5 GB. <code>history</code> reads them as they are.</td></tr>
+          <tr><td>Expiry</td><td>Past the 5 GB, the oldest archived sessions are deleted. That only stops a runaway agent from filling the disk.</td></tr>
+          <tr><td>Change it</td><td><code>mx config set log.days 90</code> makes history expire; <code>log.max</code> and <code>log.archive_max</code> take sizes. Agents can raise these, only you can lower them.</td></tr>
+        </table>
+      </div>
     </div>
   </section>
 
