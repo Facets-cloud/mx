@@ -72,18 +72,19 @@ func nearCenter(_ r: CGRect) -> CGPoint {
 
 /// Types text into the app one key event per character (newlines as Return).
 /// `pace` is the pause after each character: human pace in watch mode, minimal otherwise.
-func typeText(_ text: String, to pid: pid_t, pace: () -> Double) {
+/// `hid` posts through the HID tap instead of to the pid (see post).
+func typeText(_ text: String, to pid: pid_t, hid: Bool = false, pace: () -> Double) {
     let src = CGEventSource(stateID: .privateState)
     for ch in text {
         if ch == "\n" || ch == "\r\n" || ch == "\r" {
-            post(KeyCombo(code: 36, flags: [], char: nil), to: pid)
+            post(KeyCombo(code: 36, flags: [], char: nil), to: pid, hid: hid)
         } else {
             var u = Array(String(ch).utf16)
             for down in [true, false] {
                 guard let ev = CGEvent(keyboardEventSource: src, virtualKey: 0, keyDown: down) else { continue }
                 ev.flags = []
                 ev.keyboardSetUnicodeString(stringLength: u.count, unicodeString: &u)
-                ev.postToPid(pid)
+                if hid { ev.postHID() } else { ev.postToPid(pid) }
             }
         }
         usleep(UInt32(pace() * 1e6))

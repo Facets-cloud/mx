@@ -553,8 +553,15 @@ final class Tools {
         var pid: pid_t = 0
         AXUIElementGetPid(hit, &pid)
         guard pid == ctx.app.processIdentifier else { return false }
-        if CFEqual(hit, w) { return true }
-        return copyAttr(hit, kAXWindowAttribute).map { CFEqual($0, w) } ?? false
+        if copyAttr(hit, kAXWindowAttribute).map({ CFEqual($0, w) }) ?? false { return true }
+        // Elements in an open or save panel have no AXWindow: walk up to the sheet or panel.
+        var el: AXUIElement? = hit
+        for _ in 0..<40 {
+            guard let e = el else { return false }
+            if CFEqual(e, w) { return true }
+            el = axEl(e, kAXParentAttribute)
+        }
+        return false
     }
 
     private func fill(_ n: Node, _ text: String) throws -> String {
@@ -576,9 +583,12 @@ final class Tools {
     private func key(_ ctx: Ctx, _ combo: String, _ n: Node?, confirm: Bool) throws -> String {
         let k = try parseKey(combo)
         // System processes (Control Center, the Dock) have no key window to check: keys go to the process.
-        let focused = ctx.regular ? try focusForKeys(ctx, try ctx.window(), n)
-            : copyAttr(ctx.appEl, kAXFocusedUIElementAttribute).map { $0 as! AXUIElement }
-        if !confirm && isSubmitKey(k), let why = submitGateReason(n?.el ?? focused) {
+        let w = ctx.regular ? try ctx.window() : nil
+        let focused = try w.map { try focusForKeys(ctx, $0, n) }
+            ?? copyAttr(ctx.appEl, kAXFocusedUIElementAttribute).map { $0 as! AXUIElement }
+        // Return in an open or save panel saves or opens a file; it can't send a message.
+        let panel = w.map(isRemotePanel) ?? false
+        if !confirm && isSubmitKey(k) && !panel, let why = submitGateReason(n?.el ?? focused) {
             throw MXError("refused: \(combo) in a text box can send it (\(why)); ask the user, then pass confirm=true")
         }
         if !confirm && isTrashShortcut(k) && isFinder(name: ctx.name, bundle: ctx.app.bundleIdentifier) {
@@ -586,11 +596,20 @@ final class Tools {
         }
         if !isNavigationKey(k) { try settingsGate(ctx, n?.el ?? focused, "press \(combo)", confirm: confirm, sidebarOK: false) }
         // cmd and ctrl shortcuts are menu key equivalents, which a background app drops.
-        if needsFront(k) { try needFront(ctx, "shortcut") }
+        if needsFront(k) || panel { try needFront(ctx, "shortcut") }
+        if panel { try checkPanelKeys(ctx) }
         show("Press \(combo)", at: (n?.el ?? focused).flatMap(liveFrame))
-        post(k, to: ctx.app.processIdentifier)
+        post(k, to: ctx.app.processIdentifier, hid: panel)
         actions += 1
         return "pressed \(combo)"
+    }
+
+    /// Keys for a panel the panel service draws go through the HID tap, which reaches whatever
+    /// app is in front: refuse unless it is this one (needFront has just brought it there).
+    private func checkPanelKeys(_ ctx: Ctx) throws {
+        guard isFront(ctx.app.processIdentifier) else {
+            throw MXError("\(ctx.name) is not in front, so keys for its open or save panel could land in another app")
+        }
     }
 
     /// Focuses n (if given), makes w the app's key window, and returns the focused element.
@@ -628,10 +647,12 @@ final class Tools {
         }
         let w = try ctx.window()
         _ = try focusForKeys(ctx, w, n)
+        let panel = isRemotePanel(w)
+        if panel { try needFront(ctx, "shortcut"); try checkPanelKeys(ctx) }
         show("Type \(text.count) characters", at: liveFrame(n.el))
-        try clearByKeys(ctx, n)
+        try clearByKeys(ctx, n, hid: panel)
         let watch = mode == .watch
-        typeText(text, to: ctx.app.processIdentifier, pace: { watch ? .random(in: 0.04...0.08) : 0.004 })
+        typeText(text, to: ctx.app.processIdentifier, hid: panel, pace: { watch ? .random(in: 0.04...0.08) : 0.004 })
         actions += 1
         return "typed \(text.count) characters into \(displayRole(n))"
     }
@@ -641,8 +662,8 @@ final class Tools {
     /// TextEdit capitalizing the first word) commits on the next key and drops the selection.
     /// Selects through AXSelectedTextRange, since a background app drops a cmd+a key event;
     /// falls back to cmd+a with the front borrowed. A value of only whitespace and newlines
-    /// counts as cleared: Slack's empty message box reads "\n".
-    private func clearByKeys(_ ctx: Ctx, _ n: Node) throws {
+    /// counts as cleared: Slack's empty message box reads "\n". `hid`: see post.
+    private func clearByKeys(_ ctx: Ctx, _ n: Node, hid: Bool = false) throws {
         let pid = ctx.app.processIdentifier
         func length() -> Int {
             (copyAttr(n.el, kAXNumberOfCharactersAttribute) as? Int) ?? stringValue(copyAttr(n.el, kAXValueAttribute)).utf16.count
@@ -659,10 +680,10 @@ final class Tools {
             } ?? false
             if !selected {
                 try needFront(ctx, "shortcut")
-                post(try parseKey("cmd+a"), to: pid)
+                post(try parseKey("cmd+a"), to: pid, hid: hid)
                 usleep(30_000)
             }
-            post(try parseKey("delete"), to: pid)
+            post(try parseKey("delete"), to: pid, hid: hid)
             let deadline = now() + 0.3
             while !cleared() && now() < deadline { usleep(10_000) }
         }

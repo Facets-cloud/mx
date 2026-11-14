@@ -146,8 +146,11 @@ forward at once.
   `x-apple.systempreferences:` URLs with an anchor reach sub-panes. Prefer
   this to clicking through System Settings.
 - Dialogs: Open and Save panels and sheets show up in `scope: "windows"`
-  (and under their window). Type a file name into the name field with
-  `fill`, or a folder path after `key cmd+shift+g`.
+  (and under their window). To save to a folder, after `key cmd+s` run one
+  batch: fill textbox "Save As:" with the name, key cmd+shift+g, fill
+  role textbox, name "" (the Go to Folder field) with the path, key return,
+  click button "Save". Return needs no confirm in these panels. Don't
+  scroll the file list looking for a folder: go to it by path.
 - `scroll(app, ref, direction, amount)` scrolls by pages. Without a
   direction it brings the element into view. `drag(app, from, to)` takes
   refs or `{x, y}` points, such as a window's title bar.

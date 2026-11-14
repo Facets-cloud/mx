@@ -91,7 +91,10 @@ let toolList: [[String: Any]] = [
         "but can't be read back: for brightness and volume, fill the Control Center slider instead (app \"system\"). " +
         "With ref or role, focuses that element first. Return, enter or keypad enter (with any modifier except shift alone) " +
         "into a text box (the target, else the focused element) is refused unless confirm is true, because it can send a message: " +
-        "ask the user before you pass it. shift+return, other keys, and return in a search or filter box need no confirm.",
+        "ask the user before you pass it. shift+return, other keys, and return in a search or filter box need no confirm. " +
+        "Save and Open panels: fill textbox \"Save As:\" with the name; to pick a folder, key cmd+shift+g, fill the textbox it shows " +
+        "(role textbox, name \"\") with a path such as ~/Documents, then key return (no confirm in these panels); one batch can do it all, " +
+        "ending with click button \"Save\".",
      "inputSchema": obj(target(["key": str("Key or combination, such as cmd+a or return, or a hardware key such as volume_up."), "confirm": keyConfirmArg]), ["key"])],
     ["name": "screenshot", "description": "PNG of the app's window, the whole main display (full), or one element (at most 1280 px wide). " +
         "Works with the app in the background. With marks (default), every interactive element of the window has a thin box " +

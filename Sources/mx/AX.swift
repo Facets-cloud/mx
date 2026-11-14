@@ -150,8 +150,14 @@ func walk(_ root: AXUIElement, base: Int = 0) -> [Node] {
         let subrole = v[1] as? String ?? ""
         let title = v[2] as? String ?? "", desc = v[3] as? String ?? "", placeholder = v[9] as? String ?? ""
         let secure = role == "AXSecureTextField" || subrole == "AXSecureTextField"
+        var name = !title.isEmpty ? title : !desc.isEmpty ? desc : placeholder
+        // A text field labelled by a separate text element, such as a save panel's "Save As:".
+        if name.isEmpty, role == "AXTextField" || role == "AXComboBox",
+           let label = copyAttr(el, "AXTitleUIElement"), CFGetTypeID(label) == AXUIElementGetTypeID() {
+            name = (copyAttr(label as! AXUIElement, kAXValueAttribute) as? String) ?? ""
+        }
         out.append(Node(el: el, role: role, subrole: subrole,
-                        name: !title.isEmpty ? title : !desc.isEmpty ? desc : placeholder,
+                        name: name,
                         value: secure ? "" : readableValue(el, role, v[4]),
                         enabled: (v[5] as? Bool) ?? true,
                         frame: CGRect(origin: pos, size: size ?? .zero), depth: depth + base))
@@ -377,6 +383,19 @@ func changeReport(_ before: [Line], _ after: [Line], oldTitle: String, newTitle:
 // MARK: - Windows
 
 func windowTitle(_ w: AXUIElement) -> String { copyAttr(w, kAXTitleAttribute) as? String ?? "" }
+
+/// True when w is an open or save panel (or its Go to Folder sheet) that the panel service
+/// draws for a sandboxed app: the service has a window with exactly w's frame. Keys posted
+/// to the app's pid never reach such a panel; AX values and presses do.
+func isRemotePanel(_ w: AXUIElement) -> Bool {
+    guard let f = liveFrame(w) else { return false }
+    let infos = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]] ?? []
+    return infos.contains { info in
+        guard let b = info[kCGWindowBounds as String] as? NSDictionary, CGRect(dictionaryRepresentation: b) == f,
+              let pid = info[kCGWindowOwnerPID as String] as? pid_t else { return false }
+        return NSRunningApplication(processIdentifier: pid)?.bundleIdentifier == "com.apple.appkit.xpc.openAndSavePanelService"
+    }
+}
 
 /// The window a call acts on: the one whose title or document path contains `query`,
 /// else the app's focused window.

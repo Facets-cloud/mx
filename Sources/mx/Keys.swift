@@ -43,7 +43,9 @@ func isSubmitKey(_ k: KeyCombo) -> Bool {
     (k.code == 36 || k.code == 76) && k.flags != .maskShift
 }
 
-func post(_ k: KeyCombo, to pid: pid_t) {
+/// Posts to the pid, or with hid through the HID tap, which reaches the frontmost app's key
+/// window (needed for open and save panels the panel service draws; see isRemotePanel).
+func post(_ k: KeyCombo, to pid: pid_t, hid: Bool = false) {
     let src = CGEventSource(stateID: .hidSystemState)
     for down in [true, false] {
         guard let ev = CGEvent(keyboardEventSource: src, virtualKey: k.code, keyDown: down) else { continue }
@@ -52,6 +54,6 @@ func post(_ k: KeyCombo, to pid: pid_t) {
             var u = Array(ch.utf16)
             ev.keyboardSetUnicodeString(stringLength: u.count, unicodeString: &u)
         }
-        ev.postToPid(pid)
+        if hid { ev.postHID() } else { ev.postToPid(pid) }
     }
 }
