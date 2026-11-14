@@ -160,7 +160,11 @@ forward at once.
   menu File > New Folder, then fill image "untitled folder" with the name.
 - `scroll(app, ref, direction, amount)` scrolls by pages. Without a
   direction it brings the element into view. `drag(app, from, to)` takes
-  refs or `{x, y}` points, such as a window's title bar.
+  refs or `{x, y}` points, such as a window's title bar. For items, pass
+  refs: drag checks each ref is on top at its point and refuses (or cancels
+  before the drop) when another window covers it, so nothing lands in the
+  wrong place. Then raise the window or move the cover, snapshot, and retry.
+  In Finder the result names the drop folder and where the file is now.
 - `clipboard set` puts text on the clipboard, for pasting. mx saves the
   user's clipboard before its first write (set, key cmd+c or cmd+x) and puts
   it back at `done`, unless the user copied something since. Pass

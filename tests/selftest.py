@@ -2152,12 +2152,73 @@ def finder_rename_group():
             osa(f'tell application id "{prev}" to activate')
 
 
+def drag_target_group():
+    """drag never drops on the wrong target (fix18): a second Finder window over the drop
+    target must make drag refuse, with nothing moved; with the cover gone the same drag
+    lands in the folder and says where. Scratch folders under tests/scratch/, in Finder
+    windows of its own, closed after."""
+    if not gui_idle_gate("drag target check (covered drop target)"):
+        return
+    base = os.path.join(ROOT, "tests", "scratch")
+    d, cover = os.path.join(base, f"mx-drag-{os.getpid()}"), os.path.join(base, f"mx-cover-{os.getpid()}")
+    os.makedirs(os.path.join(d, "Receipts"))
+    os.makedirs(cover)
+    open(os.path.join(d, "a.pdf"), "w").write("x")
+    name, cname = os.path.basename(d), os.path.basename(cover)
+    prev = frontmost()
+    def osa(s):
+        return subprocess.run(["osascript", "-e", s], capture_output=True, text=True)
+    # Icons placed by hand: a.pdf on the left, Receipts on the right half, which the cover window hides.
+    osa(f'tell application "Finder"\nset w to make new Finder window to (POSIX file "{d}" as alias)\n'
+        'set current view of w to icon view\nset arrangement of icon view options of w to not arranged\n'
+        'set bounds of w to {200, 150, 900, 550}\nset position of item "a.pdf" of w to {80, 80}\n'
+        'set position of item "Receipts" of w to {480, 80}\n'
+        f'set c to make new Finder window to (POSIX file "{cover}" as alias)\nset bounds of c to {{560, 150, 1060, 550}}\n'
+        'activate\nend tell')
+    time.sleep(1)
+    c = Client()
+    c.request("initialize", {"protocolVersion": "2025-06-18"})
+    w = {"app": "Finder", "window": name}
+    def moved():
+        return sorted(x for x in os.listdir(d) if not x.startswith(".")), \
+            sorted(x for x in os.listdir(os.path.join(d, "Receipts")) if not x.startswith(".")), \
+            sorted(x for x in os.listdir(cover) if not x.startswith("."))
+    def refs():
+        snap, _ = c.call("snapshot", interactive=False, **w)
+        pdf, dest = re.search(r'(e\d+) image "a.pdf"', snap), re.search(r'(e\d+) image "Receipts"', snap)
+        return (pdf.group(1), dest.group(1)) if pdf and dest else (None, None)
+    try:
+        c.call("start", title="mx drag target check", mode="background")
+        pdf, dest = refs()
+        text, is_err = c.call("drag", **{"from": pdf, "to": dest}, **w) if pdf else ("no refs", False)
+        time.sleep(1)
+        check("drag: refuses when another window covers the drop target",
+              is_err and "drop target" in text and "not dragging" in text and moved() == (["Receipts", "a.pdf"], [], []),
+              (text, moved()))
+        osa(f'tell application "Finder"\nrepeat with fw in (get every Finder window)\nif name of fw is "{cname}" then close fw\nend repeat\nend tell')
+        time.sleep(1)
+        pdf, dest = refs()
+        text, is_err = c.call("drag", **{"from": pdf, "to": dest}, **w) if pdf else ("no refs", True)
+        time.sleep(1)
+        check("drag: with the cover gone it drops into Receipts and says where",
+              not is_err and os.path.join(d, "Receipts", "a.pdf") + " is there now" in text and moved() == (["Receipts"], ["a.pdf"], []),
+              (text, moved()))
+        c.call("done", summary="drag target check")
+    finally:
+        c.close()
+        osa('tell application "Finder"\nrepeat with fw in (get every Finder window)\n'
+            f'if name of fw is "{name}" or name of fw is "{cname}" then close fw\nend repeat\nend tell')
+        subprocess.run(["rm", "-rf", "--", d, cover])
+        if prev:
+            osa(f'tell application id "{prev}" to activate')
+
+
 # Check groups `--only` can run on their own (fix10 and later).
 ONLY = {"protocol": protocol_checks, "settle": settle_checks, "diff": with_client(diff_checks), "gate": with_client(gate_table_checks),
         "indicator": indicator_group, "cc": cc_group, "fix11": fix11_group,
         "pill": lambda: fix11_group(borrows=False), "fix12": fix12_group,
         "fix12-idle": lambda: fix12_group(front_eof=False), "fix13": fix13_group,
-        "audit": audit_checks, "finder": finder_rename_group}
+        "audit": audit_checks, "finder": finder_rename_group, "drag": drag_target_group}
 
 
 if __name__ == "__main__":

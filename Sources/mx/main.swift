@@ -133,7 +133,9 @@ let toolList: [[String: Any]] = [
      "inputSchema": obj(target(["direction": ["type": "string", "enum": ["up", "down", "left", "right"]],
                                 "amount": ["type": "number", "description": "Pages to scroll, default 1."]]), ["app"])],
     ["name": "drag", "description": "Drag with the mouse from one point to another; each end is a ref or {\"x\": .., \"y\": ..} in screen points. " +
-        "Borrows the front in background mode. Use it to move windows by the title bar, select text, or drag items.",
+        "Borrows the front in background mode. Use it to move windows by the title bar, select text, or drag items. " +
+        "A ref end must be on top at its point: if another window covers it, drag refuses, and if the drop ref is no longer under the " +
+        "point at release, it cancels the drag; nothing is dropped. The result says what was under each end (in Finder, the drop folder).",
      "inputSchema": obj(["app": appArg, "window": windowArg, "scope": scopeArg,
                          "from": ["description": "A ref or {\"x\": .., \"y\": ..}."], "to": ["description": "A ref or {\"x\": .., \"y\": ..}."]],
                         ["app", "from", "to"])],

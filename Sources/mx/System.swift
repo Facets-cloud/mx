@@ -850,10 +850,13 @@ extension Tools {
     }
 
     /// drag(app, from, to): a mouse drag between two refs or {x, y} points (screen
-    /// coordinates, top-left origin). Borrows the front for a regular app.
+    /// coordinates, top-left origin). Borrows the front for a regular app. A ref end must be
+    /// under its point before mouse-down (the element or one inside it), and the drop ref
+    /// again right before mouse-up, else mx cancels the drag (Escape, then releases on the
+    /// source) so nothing lands on the wrong target. A point end reports what is under it.
     func drag(_ args: [String: Any]) throws -> String {
         let ctx = try context(args)
-        let from = try dragPoint(ctx, args["from"], "from"), to = try dragPoint(ctx, args["to"], "to")
+        let (from, fromRef) = try dragPoint(ctx, args["from"], "from"), (to, toRef) = try dragPoint(ctx, args["to"], "to")
         return try acting(ctx, titleWait: { false }) {
             if ctx.regular { try needFront(ctx, "click") }
             let deadline = now() + 1
@@ -861,6 +864,8 @@ extension Tools {
             guard hitsProcess(from, pid: ctx.app.processIdentifier) else {
                 throw MXError("\(Int(from.x)),\(Int(from.y)) is not on \(ctx.name) (something covers it); not dragging")
             }
+            let source = try dragEnd(from, fromRef, "source")
+            _ = try dragEnd(to, toRef, "drop target")
             showMouse("Drag", at: CGRect(x: from.x - 1, y: from.y - 1, width: 2, height: 2))
             let saved = CGEvent(source: nil)?.location
             func ev(_ type: CGEventType, _ p: CGPoint) {
@@ -875,26 +880,105 @@ extension Tools {
                 usleep(mode == .watch ? 25_000 : 12_000)
             }
             usleep(80_000)
+            // Right before the drop: the drop ref must still be under the point.
+            let under = elementAt(to)
+            if let toRef, !(under.map { isWithin($0, toRef.el) } ?? false) {
+                post(try parseKey("escape"), to: ctx.app.processIdentifier, hid: true); usleep(100_000)
+                ev(.leftMouseDragged, from); usleep(80_000)
+                ev(.leftMouseUp, from); usleep(100_000)
+                if let saved, mode != .watch, borrow == nil { CGWarpMouseCursorPosition(saved) }
+                throw MXError("cancelled the drag before dropping: under \(Int(to.x)),\(Int(to.y)) is now " +
+                              "\(under.map(hitText) ?? "nothing mx can read"), not \(describe(toRef)); nothing was dropped")
+            }
             ev(.leftMouseUp, to)
             usleep(100_000)
             if let saved, mode != .watch, borrow == nil { CGWarpMouseCursorPosition(saved) }
             actions += 1
-            return "dragged from \(Int(from.x)),\(Int(from.y)) to \(Int(to.x)),\(Int(to.y))"
+            var out = "dragged " + (source.map { hitText($0) + " " } ?? "") + "at \(Int(from.x)),\(Int(from.y)) onto \(under.map(hitText) ?? "nothing mx can read") at \(Int(to.x)),\(Int(to.y))"
+            if isFinder(name: ctx.name, bundle: ctx.app.bundleIdentifier), let dir = under.flatMap(finderFolder) {
+                out += "; the drop folder is \(dir)"
+                // Where the item went, when the source is a file mx can see.
+                if let src = fromRef.flatMap({ copyAttr($0.el, kAXURLAttribute) as? URL }).flatMap({ ($0 as NSURL).filePathURL }) {
+                    let dest = URL(fileURLWithPath: dir).appendingPathComponent(src.lastPathComponent).path
+                    let until = now() + 1
+                    while !FileManager.default.fileExists(atPath: dest) && now() < until { usleep(100_000) }
+                    out += FileManager.default.fileExists(atPath: dest) ? "; \(dest) is there now"
+                        : "; \(src.lastPathComponent) is not in \(dir) after 1 s"
+                }
+            }
+            return out
         }
     }
 
     /// A drag end: a ref (its visible center) or {"x": .., "y": ..}.
-    private func dragPoint(_ ctx: Ctx, _ v: Any?, _ which: String) throws -> CGPoint {
+    private func dragPoint(_ ctx: Ctx, _ v: Any?, _ which: String) throws -> (CGPoint, Node?) {
         if let ref = v as? String {
             guard let n = ctx.st.refs[ref] else { throw MXError("ref \(ref) is not in the latest snapshot of \(ctx.name)") }
             guard let f = liveFrame(n.el) else { throw MXError("\(describe(n)) has no frame") }
-            return CGPoint(x: f.midX, y: f.midY)
+            return (CGPoint(x: f.midX, y: f.midY), n)
         }
         if let d = v as? [String: Any], let x = (d["x"] as? NSNumber)?.doubleValue, let y = (d["y"] as? NSNumber)?.doubleValue {
-            return CGPoint(x: x, y: y)
+            return (CGPoint(x: x, y: y), nil)
         }
         throw MXError("drag needs \(which): a ref or {\"x\": .., \"y\": ..}")
     }
+
+    /// The element under a drag end, checked before mouse-down: for a ref it must be that
+    /// element or one inside it (so also in its window), else something covers or replaced it.
+    private func dragEnd(_ p: CGPoint, _ ref: Node?, _ which: String) throws -> AXUIElement? {
+        let hit = elementAt(p)
+        guard let ref else { return hit }
+        guard let hit else { throw MXError("mx can't read what is under the \(which) \(describe(ref)) at \(Int(p.x)),\(Int(p.y)); not dragging") }
+        if !isWithin(hit, ref.el) {
+            throw MXError("the \(which) \(describe(ref)) is not under \(Int(p.x)),\(Int(p.y)): \(hitText(hit)) is; not dragging. " +
+                          "Something covers it or it moved: raise its window (window op raise) or move what covers it, then snapshot again")
+        }
+        return hit
+    }
+}
+
+/// The element under screen point p, from any app.
+private func elementAt(_ p: CGPoint) -> AXUIElement? {
+    let sys = AXUIElementCreateSystemWide()
+    AXUIElementSetMessagingTimeout(sys, 1.0)
+    var hit: AXUIElement?
+    guard AXUIElementCopyElementAtPosition(sys, Float(p.x), Float(p.y), &hit) == .success else { return nil }
+    return hit
+}
+
+/// True when el is ancestor or inside it.
+private func isWithin(_ el: AXUIElement, _ ancestor: AXUIElement) -> Bool {
+    var cur: AXUIElement? = el
+    for _ in 0..<40 {
+        guard let c = cur else { return false }
+        if CFEqual(c, ancestor) { return true }
+        cur = axEl(c, kAXParentAttribute)
+    }
+    return false
+}
+
+/// What a hit is, for drag results: role, name, window and app.
+private func hitText(_ el: AXUIElement) -> String {
+    let role = copyAttr(el, kAXRoleAttribute) as? String ?? "element"
+    let name = [kAXTitleAttribute, kAXFilenameAttribute, kAXDescriptionAttribute].lazy
+        .compactMap { copyAttr(el, $0) as? String }.first { !$0.isEmpty } ?? ""
+    var s = (role.hasPrefix("AX") ? String(role.dropFirst(2)).lowercased() : role) + (name.isEmpty ? "" : " " + quote(name, 60))
+    if let w = axEl(el, kAXWindowAttribute) { s += " in window " + quote(windowTitle(w), 60) }
+    var pid: pid_t = 0
+    AXUIElementGetPid(el, &pid)
+    if let app = NSRunningApplication(processIdentifier: pid)?.localizedName { s += " (\(app))" }
+    return s
+}
+
+/// For a Finder drop: the folder that receives it, a folder item's own path or the
+/// window's folder for a drop on its background. Nil for a file or anything else.
+private func finderFolder(_ el: AXUIElement) -> String? {
+    if let url = (copyAttr(el, kAXURLAttribute) as? URL).flatMap({ ($0 as NSURL).filePathURL }), copyAttr(el, kAXFilenameAttribute) != nil {
+        return url.hasDirectoryPath ? url.path : nil
+    }
+    guard let w = axEl(el, kAXWindowAttribute), let doc = copyAttr(w, kAXDocumentAttribute) as? String,
+          let url = URL(string: doc), url.isFileURL else { return nil }
+    return url.path
 }
 
 /// A scroll position as a percent: the scroll bar's value, else the content's offset.
