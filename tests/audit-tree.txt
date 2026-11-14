@@ -1,0 +1,9 @@
+mx-fixture000001  claude-code  mx  Nov 14 09:00:00-09:00:09  "Reply to Alex"  5 actions, 1 failed, 1 refused  Slack
+resume: claude --resume 11111111-2222-3333-4444-555555555555
+└─ "Reply to Alex"  Nov 14 09:00:00-09:00:09  5 actions, 1 failed, 1 refused  done: "Replied to Alex"
+   └─ Slack · "Alex (DM) - Facets - Slack"
+      ├─ 09:00:01  snapshot  ok 120ms
+      ├─ 09:00:02  fill textarea "Message to Alex" text (24 chars)  ok 40ms
+      ├─ 09:00:03  key return in textarea "Message to Alex"  REFUSED (send gate)
+      ├─ 09:00:05  key return in textarea "Message to Alex"  [confirmed]  ok 300ms  (borrowed front 210ms)
+      └─ 09:00:07  click button "Huddle"  FAILED: no button "huddle" appeared in Slack within 3s

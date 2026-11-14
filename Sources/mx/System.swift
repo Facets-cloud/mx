@@ -341,16 +341,16 @@ extension Tools {
     func clickGates(_ ctx: Ctx, _ n: Node, _ label: String, action: String, confirm: Bool) throws {
         if action != "cancel", !denyLabels.contains(label.lowercased()), inPermissionPrompt(ctx, n.el) {
             throw MXError("refused: \(quote(label, 40)) is in a macOS permission prompt. mx never grants permissions, even with confirm " +
-                "(macOS ignores synthetic clicks there anyway). Ask the user to answer it themselves.")
+                "(macOS ignores synthetic clicks there anyway). Ask the user to answer it themselves.", rule: "permission prompt")
         }
         if !confirm, ["press", "pick", "confirm"].contains(action), n.role != "AXMenuBarItem", isDangerous(label) {
             throw MXError("refused: \(displayRole(n)) \(quote(label, 60)) looks like it sends, posts, deletes, removes, pays, buys, archives, submits, " +
                 "erases, resets, restarts, shuts down, logs out, trashes, force quits, ships, deploys, releases, publishes, leaves, places an order, " +
-                "schedules or checks out. Ask the user first; if they agree, call again with confirm=true.")
+                "schedules or checks out. Ask the user first; if they agree, call again with confirm=true.", rule: "confirm gate")
         }
         if !confirm, ["press", "pick", "confirm"].contains(action), label.isEmpty, n.role == "AXButton", isComposerButton(n) {
             throw MXError("refused: an unlabeled button next to a text box is often the Send button of a composer. " +
-                "Ask the user first; if they agree, call again with confirm=true.")
+                "Ask the user first; if they agree, call again with confirm=true.", rule: "composer button")
         }
         if !["showmenu", "raise", "cancel"].contains(action) {
             try settingsGate(ctx, n.el, "\(action) \(describe(n))", confirm: confirm)
@@ -362,7 +362,7 @@ extension Tools {
     func settingsGate(_ ctx: Ctx, _ el: AXUIElement?, _ what: String, confirm: Bool, sidebarOK: Bool = true) throws {
         guard !confirm, let pane = sensitivePane(ctx, el), !(sidebarOK && (el.map(inSidebar) ?? false)) else { return }
         throw MXError("refused: \(what) is in System Settings > \(pane), which changes security, account or sharing settings. " +
-            "Reading is fine; ask the user before changing anything here, then pass confirm=true.")
+            "Reading is fine; ask the user before changing anything here, then pass confirm=true.", rule: "sensitive pane")
     }
 
     /// fill on a slider or incrementor: a percent of its range ("75%", or 75 on a 0–1
@@ -447,7 +447,7 @@ extension Tools {
         // A background app disables items that need its key window; only a disabled item
         // in a frontmost app is really disabled.
         if !(args["confirm"] as? Bool ?? false), isDangerous(titles.last!) {
-            throw MXError("refused: \(pathText) looks like it deletes, erases, restarts, shuts down, logs out or similar. Ask the user first; if they agree, call again with confirm=true.")
+            throw MXError("refused: \(pathText) looks like it deletes, erases, restarts, shuts down, logs out or similar. Ask the user first; if they agree, call again with confirm=true.", rule: "confirm gate")
         }
         if !enabled() && (!ctx.regular || isFront(ctx.app.processIdentifier)) { throw MXError("\(pathText) is disabled right now") }
         return try acting(ctx, titleWait: { true }) {
@@ -526,7 +526,7 @@ extension Tools {
     private func closeWindow(_ ctx: Ctx, _ w: AXUIElement, confirm: Bool) throws -> String {
         let name = quote(windowTitle(w), 60)
         if !confirm && isEdited(w) {
-            throw MXError("refused: \(name) has unsaved changes; closing it can lose them or ask to save. Ask the user, then pass confirm=true.")
+            throw MXError("refused: \(name) has unsaved changes; closing it can lose them or ask to save. Ask the user, then pass confirm=true.", rule: "unsaved close")
         }
         guard let b = axEl(w, kAXCloseButtonAttribute), AXUIElementPerformAction(b, kAXPressAction as CFString) == .success else {
             throw MXError("\(name) has no close button that responds")
@@ -575,7 +575,7 @@ extension Tools {
                 : "asked \(label) to quit; it is still running (it may be asking to save: snapshot it with scope windows)"
         case "force_quit":
             guard args["confirm"] as? Bool ?? false else {
-                throw MXError("refused: force quitting \(label) loses its unsaved work. Ask the user, then pass confirm=true.")
+                throw MXError("refused: force quitting \(label) loses its unsaved work. Ask the user, then pass confirm=true.", rule: "force quit")
             }
             app.forceTerminate()
             return wait(gone, 3) ? "force quit \(label)" : "asked \(label) to force quit; it is still running"
@@ -585,11 +585,11 @@ extension Tools {
     }
 
     private func launch(_ name: String) throws -> String {
-        if let why = blockReason(name: name, bundle: name) { throw MXError("mx refuses to launch \(name): \(why).") }
+        if let why = blockReason(name: name, bundle: name) { throw MXError("mx refuses to launch \(name): \(why).", rule: "blocked app") }
         guard let url = appURL(name) else { throw MXError("no app named \(quote(name, 40)) in /Applications, /System/Applications or ~/Applications") }
         let bundle = Bundle(url: url)?.bundleIdentifier
         if let why = blockReason(name: url.deletingPathExtension().lastPathComponent, bundle: bundle) {
-            throw MXError("mx refuses to launch \(name): \(why).")
+            throw MXError("mx refuses to launch \(name): \(why).", rule: "blocked app")
         }
         let cfg = NSWorkspace.OpenConfiguration()
         cfg.activates = mode.inFront
@@ -628,7 +628,7 @@ extension Tools {
         guard let handler else { throw MXError("no app on this Mac opens \(target)") }
         let appName = handler.deletingPathExtension().lastPathComponent
         if let why = blockReason(name: appName, bundle: Bundle(url: handler)?.bundleIdentifier) {
-            throw MXError("refused: \(target) would open in \(appName), and \(why).")
+            throw MXError("refused: \(target) would open in \(appName), and \(why).", rule: "blocked app")
         }
         let cfg = NSWorkspace.OpenConfiguration()
         cfg.activates = mode.inFront
@@ -681,7 +681,7 @@ extension Tools {
         switch (args["op"] as? String ?? "").lowercased() {
         case "get":
             guard args["confirm"] as? Bool ?? false else {
-                throw MXError("refused: the clipboard can hold a password or other secret. Ask the user, then pass confirm=true.")
+                throw MXError("refused: the clipboard can hold a password or other secret. Ask the user, then pass confirm=true.", rule: "clipboard read")
             }
             return pb.string(forType: .string) ?? "(the clipboard holds no text)"
         case "set":

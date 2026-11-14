@@ -72,6 +72,8 @@ final class Tools {
     /// An open borrow of the front (see Borrow.swift), and the notes of borrows ended in this call.
     var borrow: Borrow?
     private var borrowNotes: [String] = []
+    /// Where the current call acted, for its audit log line (Audit.swift).
+    var audit = AuditCall()
     /// Self-test only: `_fake_idle_ms` on a call stands in for the user's idle time.
     private var fakeIdleMs: Double?
 
@@ -86,8 +88,12 @@ final class Tools {
         if name == "_debug_dangerous" {
             return ((args["labels"] as? [String]) ?? []).map { "\($0): \(isDangerous($0) ? "yes" : "no")" }.joined(separator: "\n")
         }
+        if name == "_debug_audit" { return debugAudit(args) }
         pendingImage = nil
+        audit = AuditCall(title: title, mode: mode.rawValue)
         fakeIdleMs = (args["_fake_idle_ms"] as? NSNumber)?.doubleValue
+        if name == "history" { return try historyTool(args) }
+        if name == "settings" { return try settingsTool(args) }
         if !["start", "done", "list_apps", "clipboard"].contains(name) { try checkTrust() }
         if name != "start" && name != "done" && started == nil { started = now(); actions = 0 }
         defer { if name != "done" { idle() } }
@@ -151,6 +157,7 @@ final class Tools {
             title = newTitle
             started = now(); actions = 0
         }
+        audit.title = title; audit.mode = mode.rawValue
         return "\(continuing ? "updated" : "started") \"\(title ?? "untitled")\" (mode \(mode.rawValue), typing \(typing.rawValue))"
     }
 
@@ -202,9 +209,11 @@ final class Tools {
         let scope = system ? .system : scopeArg ?? st.scope ?? (app.activationPolicy == .regular ? .window : .app)
         let ctx = Ctx(app: app, appEl: appEl, st: st, windowQuery: args["window"] as? String, scope: scope)
         current = app
+        let win = system ? nil : try? resolveWindow(appEl, ctx.windowQuery)
+        audit.app = ctx.name; audit.bundle = app.bundleIdentifier; audit.pid = pid; audit.window = win.map(windowTitle)
         // The border follows the window the call acts on; the system UI has none. Without a
         // window query it also follows the app's focus to a sheet or dialog between calls.
-        Overlay.shared.track(system ? nil : (try? resolveWindow(appEl, ctx.windowQuery)).flatMap(windowID),
+        Overlay.shared.track(win.flatMap(windowID),
                              follow: system || ctx.windowQuery?.isEmpty == false ? nil : pid)
         // Front and watch modes keep the session's app in front, including when it moves to another app.
         if mode.inFront, ctx.regular, !activate(app) {
@@ -271,6 +280,7 @@ final class Tools {
         guard let w1 = try? ctx.roots() else { return msg + "\nthe window closed" }
         let after = ctx.st.render(walkAll(w1, single: ctx.scope == .window))
         let same = w0.count == w1.count && zip(w0, w1).allSatisfy { CFEqual($0, $1) }
+        if !same || ctx.title(w1) != title0 { audit.to = w1.first.map(windowTitle) }
         logSnapshotChoice(sameWindow: same, before: before.count, after: after.count, settled: settled, titleWait: wait)
         if wantsFullSnapshot(sameWindow: same) {
             return msg + "\n\(ctx.scope == .window ? "window" : "scope") changed: " + header(ctx, w1, after.count) + "\n" + format(after)
@@ -338,6 +348,12 @@ final class Tools {
 
     /// A ref from the latest snapshot, or a role and name to wait for (up to 3 s).
     func target(_ ctx: Ctx, _ args: [String: Any]) throws -> Node {
+        let n = try findTarget(ctx, args)
+        audit.element = (displayRole(n), n.name)
+        return n
+    }
+
+    private func findTarget(_ ctx: Ctx, _ args: [String: Any]) throws -> Node {
         if let ref = args["ref"] as? String, !ref.isEmpty {
             guard let n = ctx.st.refs[ref] else {
                 throw MXError("ref \(ref) is not in the latest snapshot of \(ctx.name); call snapshot again or use role and name")
@@ -420,6 +436,7 @@ final class Tools {
         guard let b = borrow else { return }
         borrow = nil
         borrowNotes.append(b.end())
+        audit.borrowMs += Int((now() - b.started) * 1000)
         Overlay.shared.hidePointer()
         Overlay.shared.toast(b.toast)
     }
@@ -462,7 +479,7 @@ final class Tools {
         let count = (args["count"] as? NSNumber)?.intValue ?? 1
         let right = (args["button"] as? String)?.lowercased() == "right"
         let forceMouse = args["force_mouse"] as? Bool ?? false
-        if n.isSecure { throw MXError("mx never touches password fields") }
+        if n.isSecure { throw MXError("mx never touches password fields", rule: "secure field") }
         let label = n.name.isEmpty ? n.value : n.name
         try clickGates(ctx, n, label, action: action, confirm: args["confirm"] as? Bool ?? false)
         let what = "\(action == "press" ? "clicked" : action) \(displayRole(n)) \(quote(label, 60))"
@@ -567,7 +584,7 @@ final class Tools {
     }
 
     private func fill(_ n: Node, _ text: String) throws -> String {
-        if n.isSecure { throw MXError("mx never touches password fields") }
+        if n.isSecure { throw MXError("mx never touches password fields", rule: "secure field") }
         var settable: DarwinBoolean = false
         AXUIElementIsAttributeSettable(n.el, kAXValueAttribute as CFString, &settable)
         guard settable.boolValue else { throw MXError("\(describe(n)) does not take a value; click it and use key instead") }
@@ -591,10 +608,10 @@ final class Tools {
         // Return in an open or save panel saves or opens a file; it can't send a message.
         let panel = w.map(isRemotePanel) ?? false
         if !confirm && isSubmitKey(k) && !panel, let why = submitGateReason(n?.el ?? focused) {
-            throw MXError("refused: \(combo) in a text box can send it (\(why)); ask the user, then pass confirm=true")
+            throw MXError("refused: \(combo) in a text box can send it (\(why)); ask the user, then pass confirm=true", rule: "send gate")
         }
         if !confirm && isTrashShortcut(k) && isFinder(name: ctx.name, bundle: ctx.app.bundleIdentifier) {
-            throw MXError("refused: \(combo) in Finder moves the selection to the Trash or deletes it; ask the user, then pass confirm=true")
+            throw MXError("refused: \(combo) in Finder moves the selection to the Trash or deletes it; ask the user, then pass confirm=true", rule: "finder trash")
         }
         if !isNavigationKey(k) { try settingsGate(ctx, n?.el ?? focused, "press \(combo)", confirm: confirm, sidebarOK: false) }
         // cmd and ctrl shortcuts are menu key equivalents, which a background app drops.
@@ -619,7 +636,7 @@ final class Tools {
     /// and if focus is in a password field.
     private func focusForKeys(_ ctx: Ctx, _ w: AXUIElement, _ n: Node?) throws -> AXUIElement? {
         if let n {
-            if n.isSecure { throw MXError("mx never touches password fields") }
+            if n.isSecure { throw MXError("mx never touches password fields", rule: "secure field") }
             AXUIElementSetAttributeValue(n.el, kAXFocusedAttribute as CFString, kCFBooleanTrue)
         }
         func focusedWindow() -> AXUIElement? { copyAttr(ctx.appEl, kAXFocusedWindowAttribute).map { $0 as! AXUIElement } }
@@ -634,7 +651,7 @@ final class Tools {
         }
         let focused = copyAttr(ctx.appEl, kAXFocusedUIElementAttribute).map { $0 as! AXUIElement }
         if let f = focused, [kAXRoleAttribute, kAXSubroleAttribute].contains(where: { copyAttr(f, $0) as? String == "AXSecureTextField" }) {
-            throw MXError("focus is in a password field; mx never types there")
+            throw MXError("focus is in a password field; mx never types there", rule: "secure field")
         }
         return focused
     }
@@ -645,7 +662,7 @@ final class Tools {
     private func typeInto(_ ctx: Ctx, _ n: Node, _ text: String, confirm: Bool) throws -> String {
         if !confirm && text.contains(where: { $0.isNewline }) {
             throw MXError("refused: the text has a newline, and typed key by key it is a Return, which can send it; " +
-                "ask the user, then pass confirm=true (or use shift+return between lines)")
+                "ask the user, then pass confirm=true (or use shift+return between lines)", rule: "newline gate")
         }
         let w = try ctx.window()
         _ = try focusForKeys(ctx, w, n)
@@ -698,7 +715,7 @@ final class Tools {
     }
 
     private func readValue(_ n: Node) throws -> String {
-        if n.isSecure { throw MXError("mx never reads password fields") }
+        if n.isSecure { throw MXError("mx never reads password fields", rule: "secure field") }
         let raw = copyAttr(n.el, kAXValueAttribute)
         var value = readableValue(n.el, n.role, raw)
         if n.role == "AXSlider", let v = (raw as? NSNumber)?.doubleValue, value.hasSuffix("%") { value += String(format: " (%.4g)", v) }
@@ -711,11 +728,15 @@ final class Tools {
         guard let steps = args["steps"] as? [[String: Any]], !steps.isEmpty else { throw MXError("batch needs steps") }
         defer { step = nil }
         var failure: String?
+        var rule: String?
+        let values = Config.load().log.valuesLevel
         var reads: [String] = []  // read steps' values, returned with the result
         let waits = batchTitleWaits(steps.map { $0["action"] as? String ?? "" })
         let out = try acting(ctx, titleWait: { waits.last! }) {
             for (i, s) in steps.enumerated() {
                 step = "\(i + 1)/\(steps.count)"
+                audit.element = nil
+                defer { audit.steps.append(describeCall(s["action"] as? String ?? "?", s, audit.element, values: values)) }
                 if !stepNeedsFront(s) { endBorrow() }  // a borrow spans only consecutive front-needing steps
                 do {
                     let r = try perform(s["action"] as? String ?? "", ctx, s)
@@ -725,13 +746,14 @@ final class Tools {
                         if mode == .watch { usleep(400_000) }  // let a person follow along
                     }
                 } catch let e as MXError {
+                    rule = e.rule
                     failure = "step \(i + 1)/\(steps.count) (\(s["action"] as? String ?? "?")) failed: \(e.message). Ran \(i) of \(steps.count) steps."
                     break
                 }
             }
             return ([failure ?? "ran \(steps.count) steps"] + reads).joined(separator: "\n")
         }
-        if failure != nil { throw MXError(out) }
+        if failure != nil { throw MXError(out, rule: rule) }
         return out
     }
 }

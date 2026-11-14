@@ -1,0 +1,34 @@
+{
+  "name": "mx",
+  "description": "Drive Mac apps (Slack, Mail, Notes, Finder, any native or Electron app) and the rest of the Mac through the accessibility API, in the background or in front of you.",
+  "author": {
+    "name": "Facets Cloud"
+  },
+  "homepage": "https://github.com/Facets-cloud/mx",
+  "repository": "https://github.com/Facets-cloud/mx",
+  "license": "MIT",
+  "keywords": [
+    "macos",
+    "accessibility",
+    "mcp",
+    "automation"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "mx",
+    "shortDescription": "Drive Mac apps through the accessibility API",
+    "developerName": "Facets Cloud",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/Facets-cloud/mx",
+    "defaultPrompt": [
+      "Tidy my Notes: move today's notes into a folder named Inbox",
+      "What did mx do in my last session?"
+    ]
+  }
+}

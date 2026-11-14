@@ -6,7 +6,9 @@ import ApplicationServices
 
 struct MXError: Error {
     let message: String
-    init(_ message: String) { self.message = message }
+    /// For a refusal: the safety rule that stopped the call, as the audit log names it.
+    let rule: String?
+    init(_ message: String, rule: String? = nil) { self.message = message; self.rule = rule }
 }
 
 func now() -> Double { Double(DispatchTime.now().uptimeNanoseconds) / 1e9 }
@@ -67,7 +69,7 @@ private func bundleTail(_ a: NSRunningApplication) -> String {
 /// Finds a running app by name, bundle id or pid: regular apps first, then accessory and
 /// agent processes (Control Center, Dock, MenuBarAgent...). Refuses blocked apps.
 func resolveApp(_ query: String) throws -> NSRunningApplication {
-    if let why = blockReason(name: query, bundle: query) { throw MXError("mx refuses to act on \(query): \(why).") }
+    if let why = blockReason(name: query, bundle: query) { throw MXError("mx refuses to act on \(query): \(why).", rule: "blocked app") }
     let all = NSWorkspace.shared.runningApplications
     let regular = all.filter { $0.activationPolicy == .regular }
     let q = query.lowercased()
@@ -80,7 +82,7 @@ func resolveApp(_ query: String) throws -> NSRunningApplication {
     }
     guard let app = find(regular) ?? find(all) else { throw MXError("app not running: \(query). Call list_apps (all: true for system processes).") }
     if let why = blockReason(name: app.localizedName ?? "", bundle: app.bundleIdentifier) {
-        throw MXError("mx refuses to act on \(app.localizedName ?? query): \(why).")
+        throw MXError("mx refuses to act on \(app.localizedName ?? query): \(why).", rule: "blocked app")
     }
     return app
 }

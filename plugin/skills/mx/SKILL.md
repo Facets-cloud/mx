@@ -183,6 +183,25 @@ it, even when the window is behind another app. Use it when the snapshot
 doesn't explain the layout, or the user asks to see something. `element`
 crops to one control, and `full` captures the whole main display.
 
+## History and pins
+
+mx logs every call it runs. When the user asks what mx did ("what did you
+do in Slack yesterday?"), read the log instead of guessing: `history` lists
+recent sessions, and `history` with `session: "previous"` (or `current`, or
+an id) draws one session as a tree of tasks, apps, windows and actions,
+with refusals marked. Typed text is logged only as its length.
+
+`history` with `pin: "<name>"` names the session's latest finished task so
+it can be repeated later. `pinned: ""` lists pins, `pinned: "<name>"` shows
+one. To repeat a pin, don't replay it blind. Read its steps, ask the user
+only for the values that change (the log has their lengths, not the
+text), snapshot the app, then run the steps with fresh refs, in a batch
+where you can.
+
+`settings` reads the log settings. You may raise retention when the user
+asks. Lowering logging is the user's call: the error gives you the
+`mx config set` command to pass on.
+
 ## Permissions
 
 macOS grants Accessibility (needed by every tool except `list_apps`) and

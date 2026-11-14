@@ -51,6 +51,7 @@ extension Tools {
         guard let png = NSBitmapImageRep(cgImage: out).representation(using: .png, properties: [:]) else {
             throw MXError("could not encode the screenshot as PNG")
         }
+        audit.detail = "\(out.width)x\(out.height), \(shown.count) marks"
         return ("screenshot of \(ctx.name) \(what): \(out.width)x\(out.height) PNG, \(png.count / 1024) KB, \(shown.count) marks", png)
     }
 

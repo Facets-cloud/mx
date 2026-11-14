@@ -22,7 +22,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # MX_BIN tests another copy, such as an npm package's bin/mx.
 BIN = os.environ.get("MX_BIN") or os.path.join(ROOT, ".build", "release", "mx")
 TOOLS = {"start", "done", "list_apps", "snapshot", "screenshot", "click", "fill", "key", "read", "batch",
-         "menu", "window", "app", "open", "scroll", "drag", "clipboard"}
+         "menu", "window", "app", "open", "scroll", "drag", "clipboard", "history", "settings"}
 results = []
 borrow_ms = []  # measured borrow durations, for the report
 extra_actions = [0]  # actions run again by retries, so the done count stays exact
@@ -189,7 +189,7 @@ def protocol_checks():
           init["serverInfo"]["name"] == "mx" and init["protocolVersion"] == "2025-06-18", init)
     c.notify("notifications/initialized")
     names = {t["name"] for t in c.request("tools/list")["result"]["tools"]}
-    check("tools/list has the 17 tools", names == TOOLS, names)
+    check("tools/list has the 19 tools", names == TOOLS, names)
     err = c.request("nope/nothing")
     check("unknown method -> -32601", err.get("error", {}).get("code") == -32601, err)
     err = c.request("tools/call", {"name": "teleport", "arguments": {}})
@@ -1888,11 +1888,205 @@ def fix13_group():
             os.remove(path)
 
 
+# MARK: audit log (no GUI: start, refused clipboard get and _debug_audit only, in a scratch HOME)
+
+def audit_env(home, **extra):
+    # Empty counts as unset in mx; Client merges os.environ, so blank the agent app's own ids.
+    return {**os.environ, "CLAUDE_CODE_SESSION_ID": "", "CODEX_THREAD_ID": "", "CLAUDE_PROJECT_DIR": "", "HOME": home, **extra}
+
+
+def audit_client(home, **extra):
+    c = Client(env=audit_env(home, **extra))
+    c.request("initialize", {"protocolVersion": "2025-06-18", "clientInfo": {"name": "claude-code", "version": "0"}})
+    return c
+
+
+def audit_files(home):
+    d = os.path.join(home, "Library", "Application Support", "mx", "sessions")
+    return sorted(os.path.join(d, f) for f in os.listdir(d) if ".jsonl" in f) if os.path.isdir(d) else []
+
+
+def audit_lines(path):
+    with open(path) as f:
+        return [json.loads(l) for l in f if l.strip()]
+
+
+def mx_cli(home, *args, **extra):
+    return subprocess.run([BIN, *args], capture_output=True, text=True, timeout=30, env=audit_env(home, **extra))
+
+
+def write_config(home, cfg):
+    d = os.path.join(home, "Library", "Application Support", "mx")
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "config.json"), "w") as f:
+        json.dump(cfg, f)
+
+
+def audit_checks():
+    import hashlib
+    import tempfile
+    tmp = tempfile.mkdtemp(prefix="mx-audit-")
+
+    # Session ids: derived from the agent app's session, else mx-<yyyymmdd>-<6 hex> per connection.
+    home = os.path.join(tmp, "ids")
+    for env, harness in (({"CLAUDE_CODE_SESSION_ID": "abc-123"}, "claude-code"), ({"CODEX_THREAD_ID": "th-9"}, "codex")):
+        c = audit_client(home, **env)
+        c.call("start", title="id check")
+        c.close()
+        want = "mx-" + hashlib.sha256(f"{harness}/{list(env.values())[0]}".encode()).hexdigest()[:12]
+        files = [os.path.basename(f) for f in audit_files(home)]
+        check(f"audit: {harness} session id is mx- + sha256(harness/id)[:12]", f"{want}.jsonl" in files, files)
+        r = mx_cli(home, "history", "current", **env)
+        check(f"audit: mx history current finds the {harness} session", r.returncode == 0 and want in r.stdout, r.stdout + r.stderr)
+    c = audit_client(home)
+    c.call("start", title="no harness")
+    c.close()
+    plain = [f for f in audit_files(home) if re.search(r"/mx-\d{8}-[0-9a-f]{6}\.jsonl$", f)]
+    check("audit: outside an agent app the id is mx-<yyyymmdd>-<6 hex>", len(plain) == 1, audit_files(home))
+    h = audit_lines(plain[0])[0] if plain else {}
+    check("audit: header line has v 1, type session, tool mx", h.get("v") == 1 and h.get("type") == "session" and h.get("tool") == "mx", h)
+
+    # Two processes appending to one session at once: no torn or lost lines. Some lines are
+    # longer than PIPE_BUF (512), which takes the flock path.
+    home = os.path.join(tmp, "concurrent")
+    env = {"CLAUDE_CODE_SESSION_ID": "shared"}
+    cs = [audit_client(home, **env) for _ in range(2)]
+    n = 1500
+    for i, c in enumerate(cs):
+        long = "x" * (600 if i else 10)
+        c.p.stdin.write(json.dumps({"jsonrpc": "2.0", "id": 99, "method": "tools/call", "params": {
+            "name": "_debug_audit", "arguments": {"op": "start", "n": n, "args": {"title": f"p{i} {long}"}}}}) + "\n")
+    times = [c.q.get(timeout=60)["result"]["content"][0]["text"] for c in cs]
+    for c in cs:
+        c.close()
+    files = audit_files(home)
+    raw = open(files[0]).read().splitlines() if len(files) == 1 else []
+    parsed = []
+    for l in raw:
+        try:
+            parsed.append(json.loads(l))
+        except ValueError:
+            pass
+    check("audit: 2 processes x 1500 appends to one file, every line whole",
+          len(files) == 1 and len(raw) == 2 * n + 1 and len(parsed) == len(raw)
+          and sum(1 for e in parsed if e.get("type") == "session") == 1, (files, len(raw), len(parsed)))
+    print(f"      write cost: {times}")
+
+    # Values: lengths only by default; full keeps them; off also drops window titles and names.
+    home = os.path.join(tmp, "values")
+    fill = {"op": "fill", "app": "Slack", "window": "DM - Alex", "to": "Thread", "element": ["textbox", "Message to Alex"],
+            "args": {"text": "hunter2 secret"}}
+    for level in ("on", "full", "off"):
+        write_config(home, {"log": {"values": level}})
+        c = audit_client(home, CLAUDE_CODE_SESSION_ID=f"values-{level}")
+        c.call("_debug_audit", **fill)
+        c.call("_debug_audit", op="clipboard", args={"op": "set", "text": "hunter2"})
+        c.close()
+    by = {}
+    for f in audit_files(home):
+        es = audit_lines(f)
+        by[es[0]["harness_session"].split("-")[1]] = es[1:]
+    on, full, off = by.get("on", []), by.get("full", []), by.get("off", [])
+    check("audit: values on logs lengths, never the text",
+          len(on) == 2 and on[0]["target"] == 'textbox "Message to Alex" text (14 chars)' and on[1]["target"] == "set text (7 chars)"
+          and "hunter2" not in json.dumps(on), on)
+    check("audit: values full keeps the text", len(full) == 2 and "hunter2 secret" in full[0]["target"] and "hunter2" in full[1]["target"], full)
+    check("audit: values off drops window, to and element names",
+          len(off) == 2 and off[0]["target"] == "textbox text (14 chars)" and "window" not in off[0] and "to" not in off[0]
+          and "Alex" not in json.dumps(off), off)
+
+    # URLs given to open lose query, fragment and user:password; full keeps them.
+    home = os.path.join(tmp, "urls")
+    url = "https://user:pw@example.com/reset/confirm?token=abc123#step2"
+    c = audit_client(home, CLAUDE_CODE_SESSION_ID="urls")
+    c.call("_debug_audit", op="open", args={"target": url})
+    c.call("_debug_audit", op="open", args={"target": "settings:privacy"})
+    c.close()
+    es = audit_lines(audit_files(home)[0])[1:]
+    check("audit: open URL scrubbed to https://example.com/reset/confirm, settings panes kept",
+          [e["target"] for e in es] == ["https://example.com/reset/confirm", "settings:privacy"], es)
+
+    # Settings: the agent can raise retention only; the user at a terminal can do anything.
+    home = os.path.join(tmp, "settings")
+    c = audit_client(home, CLAUDE_CODE_SESSION_ID="settings")
+    raise_text, raise_err = c.call("settings", key="log.max", value="10GB")
+    lower_text, lower_err = c.call("settings", key="log.days", value="30")
+    values_text, values_err = c.call("settings", key="log.values", value="off")
+    small_text, small_err = c.call("settings", key="log.archive_max", value="1GB")
+    read_text, _ = c.call("settings")
+    c.close()
+    check("audit: settings tool raises log.max", not raise_err and "10GB" in read_text, raise_text)
+    check("audit: settings tool can't lower log.days, log.archive_max or change log.values, and names the command",
+          lower_err and values_err and small_err and "mx config set log.days 30" in lower_text
+          and "mx config set log.values off" in values_text, (lower_text, values_text, small_text))
+    es = audit_lines(audit_files(home)[0])[1:]
+    check("audit: each refused settings change is logged as refused",
+          sum(1 for e in es if e.get("refused") == "agent lowers logging") == 3, es)
+    r = mx_cli(home, "config", "set", "log.days", "30")
+    r2 = mx_cli(home, "config")
+    check("audit: mx config set at the terminal lowers it", r.returncode == 0 and re.search(r"log.days\s+30", r2.stdout), r.stdout + r.stderr + r2.stdout)
+
+    # A refusal from a real safety rule gets its own line, with the rule.
+    home = os.path.join(tmp, "refusal")
+    c = audit_client(home, CLAUDE_CODE_SESSION_ID="refusal")
+    c.call("clipboard", op="get")
+    c.close()
+    es = audit_lines(audit_files(home)[0])[1:]
+    check("audit: a refused call is logged with refused: <rule>", len(es) == 1 and es[0].get("refused") == "clipboard read", es)
+
+    # Pins: name the latest finished task, list, show, and never overwrite.
+    home = os.path.join(tmp, "pins")
+    env = {"CLAUDE_CODE_SESSION_ID": "pins"}
+    c = audit_client(home, **env)
+    c.call("start", title="Send the weekly report")
+    c.call("_debug_audit", op="fill", app="Mail", window="New Message", element=["textbox", "To:"], args={"text": "team@example.com"})
+    c.call("_debug_audit", op="click", app="Mail", window="New Message", element=["button", "Send"], args={"confirm": True})
+    c.call("_debug_audit", op="done", args={"summary": "sent it"})
+    c.close()
+    r = mx_cli(home, "history", "pin", "current", "weekly report", **env)
+    check("audit: mx history pin names the task", r.returncode == 0 and 'pinned "weekly report"' in r.stdout and "2 steps" in r.stdout,
+          r.stdout + r.stderr)
+    r = mx_cli(home, "history", "pin", "current", "weekly report", **env)
+    check("audit: pinning an existing name is refused (pins are kept forever)", r.returncode == 1 and "exists" in r.stderr, r.stderr)
+    r = mx_cli(home, "history", "pinned")
+    check("audit: mx history pinned lists it", '"weekly report"  "Send the weekly report"  2 steps  Mail' in r.stdout, r.stdout)
+    r = mx_cli(home, "history", "pinned", "weekly report")
+    check("audit: mx history pinned <name> shows the steps and how to repeat",
+          'fill textbox "To:" text (16 chars)' in r.stdout and '[confirmed]' in r.stdout and "to repeat" in r.stdout, r.stdout)
+
+    # The tree, on a fixture (times in UTC so the text is fixed).
+    home = os.path.join(tmp, "tree")
+    d = os.path.join(home, "Library", "Application Support", "mx", "sessions")
+    os.makedirs(d)
+    with open(os.path.join(ROOT, "tests", "audit-fixture.jsonl")) as src, open(os.path.join(d, "mx-fixture000001.jsonl"), "w") as dst:
+        dst.write(src.read())
+    r = mx_cli(home, "history", "mx-fixture", TZ="UTC")
+    want = open(os.path.join(ROOT, "tests", "audit-tree.txt")).read()
+    got = re.sub(r"^log: .*\n", "", r.stdout, flags=re.M)
+    check("audit: history tree on the fixture matches tests/audit-tree.txt", got == want, "\n" + got)
+    r = mx_cli(home, "history", TZ="UTC")
+    check("audit: history list line", r.stdout.startswith("mx-fixture000001  claude-code  mx  Nov 14 09:00:00-09:00:09  \"Reply to Alex\"  5 actions, 1 failed, 1 refused  Slack"),
+          r.stdout)
+
+    # Retention at server start: past log.max the oldest idle file is gzipped, and history still reads it.
+    write_config(home, {"log": {"max": "1KB"}})
+    old = os.path.join(d, "mx-fixture000001.jsonl")
+    os.utime(old, (time.time() - 7200, time.time() - 7200))
+    c = audit_client(home, CLAUDE_CODE_SESSION_ID="retention")
+    c.call("start", title="tick")
+    c.close()
+    r = mx_cli(home, "history", "mx-fixture", TZ="UTC")
+    check("audit: retention gzips the oldest idle file past log.max; history reads the .gz",
+          os.path.exists(old + ".gz") and not os.path.exists(old) and re.sub(r"^log: .*\n", "", r.stdout, flags=re.M) == want,
+          (os.listdir(d), r.stdout[:200]))
+
+
 # Check groups `--only` can run on their own (fix10 and later).
 ONLY = {"protocol": protocol_checks, "settle": settle_checks, "diff": with_client(diff_checks), "gate": with_client(gate_table_checks),
         "indicator": indicator_group, "cc": cc_group, "fix11": fix11_group,
         "pill": lambda: fix11_group(borrows=False), "fix12": fix12_group,
-        "fix12-idle": lambda: fix12_group(front_eof=False), "fix13": fix13_group}
+        "fix12-idle": lambda: fix12_group(front_eof=False), "fix13": fix13_group,
+        "audit": audit_checks}
 
 
 if __name__ == "__main__":

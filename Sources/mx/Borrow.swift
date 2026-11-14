@@ -135,7 +135,7 @@ func waitForUserPause(fakeIdleMs: Double? = nil) throws -> Double {
         if now() - start >= 3 {
             throw MXError("the user is typing or using the mouse (mx waited 3.0 s for a pause), so mx didn't take the front " +
                 "for this step: their keys would land in the app. Wait a moment and retry this step once; " +
-                "if it's refused again, tell the user, or use start mode front.")
+                "if it's refused again, tell the user, or use start mode front.", rule: "user busy")
         }
         usleep(50_000)
     }

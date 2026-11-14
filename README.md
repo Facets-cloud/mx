@@ -168,7 +168,7 @@ It exits 0 when Accessibility is granted and 1 when it isn't.
 
 ## Tools
 
-17 tools.
+19 tools.
 
 | Group | Tools |
 | --- | --- |
@@ -176,6 +176,7 @@ It exits 0 when Accessibility is granted and 1 when it isn't.
 | Read | `list_apps`, `snapshot`, `read`, `screenshot` |
 | Act | `click`, `fill`, `key`, `batch`, `scroll`, `drag` |
 | The rest of the Mac | `menu`, `window`, `app`, `open`, `clipboard` |
+| Audit log | `history`, `settings` |
 
 - `snapshot` takes a `scope`: `window` (default), `menubar`, `extras` (an
   app's menu bar icons), `windows` (every window, panel, dialog and sheet)
@@ -235,6 +236,32 @@ inside that grant:
   the screen) are refused even with `confirm`. You answer those yourself.
 - **App text is data.** The skill tells the agent that a message or email
   asking it to do something is content to report, not an instruction.
+
+## Audit log
+
+mx writes one JSON line per tool call to
+`~/Library/Application Support/mx/sessions/<session>.jsonl` (mode 0600),
+in the same format as [bx](https://github.com/Facets-cloud/bx), so one
+viewer or log shipper reads both. Each line names the app, window, element
+(role and name), mode, result and time taken. Every `confirm: true` and
+every refusal gets its own line, with the rule that stopped it. Typed text,
+fill values and clipboard text appear only as their length. Inside Claude
+Code or Codex, a session is the app's own conversation.
+
+```sh
+mx history                        # recent sessions
+mx history previous               # one session as a tree: tasks, apps and windows, actions
+mx history pin previous "weekly report"   # name a finished task so an agent can repeat it
+mx history pinned                 # list pins; add a name to see its steps
+mx config                         # log settings
+mx config set log.values full     # also log typed text (off also drops window titles and names)
+```
+
+Logs are kept forever by default. Past 2 GB the oldest idle files are
+gzipped, and past 5 GB of archives the oldest are deleted (`log.max`,
+`log.archive_max`, `log.days`). Agents get the same views through the
+`history` and `settings` tools. An agent can raise retention but can't
+lower logging; it gets the `mx config set` command to hand to you.
 
 ## Limits
 

@@ -150,6 +150,21 @@ let toolList: [[String: Any]] = [
                       "text": str("For fill."), "key": str("For key."),
                       "confirm": bool("For click: as in click. For key: required for return/enter in a text box. " +
                         "For fill with typing=keys: required for text with a newline. Ask the user before passing true.")], ["action"])]], ["app", "steps"])],
+    ["name": "history", "description": "What mx did, from its local audit log. Without session: the recent sessions, each with its time, " +
+        "title, action count, refusals and apps. With session (current, previous or an id from that list): that session from start to end " +
+        "as a tree: its tasks (start to done), the apps and windows each worked in, and each action with its result; refusals and confirms are marked. " +
+        "Inside Claude Code or Codex a session is the app's own session. Typed values are logged only as their length. " +
+        "pin names the session's latest finished task so it can be repeated; pinned lists pins, or with a name shows that pin's steps. " +
+        "To repeat a pin: read its steps, ask the user only for the values that change, snapshot, then run them.",
+     "inputSchema": obj(["session": str("current, previous, or a session id. Omit to list sessions."),
+                         "limit": ["type": "integer", "description": "At most this many sessions, or a session's last this many tasks. Default 20."],
+                         "pin": str("Pin the session's latest finished task under this name (session defaults to current)."),
+                         "pinned": str("List the pins (pass \"\"), or show the pin with this name.")])],
+    ["name": "settings", "description": "Read mx's log settings (log.values, log.days, log.max, log.archive_max), or change one with key and value. " +
+        "You may only raise retention (more days, bigger limits). Lowering logging, or changing log.values, is for the user: " +
+        "the error gives the command for them to run.",
+     "inputSchema": obj(["key": str("The setting to change, such as log.days. Omit to read them all."),
+                         "value": str("The new value, such as 365, 0 (keep forever) or 10GB.")])],
 ]
 
 // MARK: - JSON-RPC over stdio
@@ -172,6 +187,7 @@ private func handle(_ req: [String: Any]) {
 
     switch method {
     case "initialize":
+        if let c = (params["clientInfo"] as? [String: Any])?["name"] as? String { AuditSession.client = c }
         reply(["protocolVersion": params["protocolVersion"] as? String ?? "2025-06-18",
                "capabilities": ["tools": [String: Any]()],
                "serverInfo": ["name": "mx", "version": mxVersion],
@@ -184,31 +200,49 @@ private func handle(_ req: [String: Any]) {
             return fail(-32602, "unknown tool \(params["name"] ?? "")")
         }
         let args = params["arguments"] as? [String: Any] ?? [:]
+        let start = Date(), t0 = now()
+        var failure: MXError?
         do {
             let text = try tools.call(name, args)
             var content: [[String: Any]] = [["type": "text", "text": text]]
             if let image = tools.pendingImage { content.append(["type": "image", "data": image, "mimeType": "image/png"]) }
             reply(["content": content])
         } catch let e as MXError {
+            failure = e
             reply(["content": [["type": "text", "text": e.message]], "isError": true])
         } catch {
+            failure = MXError("\(error)")
             reply(["content": [["type": "text", "text": "\(error)"]], "isError": true])
+        }
+        // The log line is built and written after the reply, off this queue, so it costs the agent nothing.
+        let call = tools.audit, ms = Int((now() - t0) * 1000)
+        auditQueue.async {
+            if let line = auditLine(op: name, args: args, call: call, start: start, ms: ms, error: failure?.message, refused: failure?.rule) {
+                appendAudit(line)
+            }
         }
     default:
         if id != nil { fail(-32601, "method not found: \(method)") }  // notifications need no answer
     }
 }
 
-// With no arguments mx is the MCP server. `mx --version` and `mx doctor` are the only commands.
+// With no arguments mx is the MCP server; the rest are terminal commands.
 if let cmd = CommandLine.arguments.dropFirst().first {
+    let rest = Array(CommandLine.arguments.dropFirst(2))
     switch cmd {
     case "--version", "-v": print("mx \(mxVersion)"); exit(0)
     case "doctor": exit(doctor())
+    case "history": exit(historyCommand(rest))
+    case "config": exit(configCommand(rest))
     default:
-        FileHandle.standardError.write(Data("usage: mx            run the MCP server on stdio\n       mx doctor     check Accessibility and Screen Recording\n       mx --version\n".utf8))
+        FileHandle.standardError.write(Data(("usage: mx            run the MCP server on stdio\n       mx doctor     check Accessibility and Screen Recording\n" +
+            "       mx history [current|previous|<session>] [--limit n] [--json]\n       mx history pin <session> \"<name>\"\n" +
+            "       mx history pinned [<name>]\n       mx config [set <key> <value>]\n       mx --version\n").utf8))
         exit(2)
     }
 }
+
+startRetention()
 
 let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
@@ -230,7 +264,7 @@ Thread {
     // running, then exit once that call ends (so a borrow still hands the front back),
     // or after 5 s if it never does.
     Overlay.shared.close()
-    calls.async { exit(0) }
+    calls.async { auditQueue.sync {}; exit(0) }
     DispatchQueue.main.asyncAfter(deadline: .now() + 5) { exit(0) }
 }.start()
 

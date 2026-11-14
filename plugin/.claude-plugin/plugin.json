@@ -7,14 +7,5 @@
   },
   "homepage": "https://github.com/Facets-cloud/mx",
   "repository": "https://github.com/Facets-cloud/mx",
-  "license": "MIT",
-  "mcpServers": {
-    "mx": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@facets-cloud/mx"
-      ]
-    }
-  }
+  "license": "MIT"
 }
