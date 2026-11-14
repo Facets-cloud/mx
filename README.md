@@ -8,6 +8,9 @@ any native or Electron app, plus menus, windows, Control Center, the Dock,
 System Settings and dialogs. It works in the background by default, so you
 keep typing in your own app while the agent works in another.
 
+See it run: **https://facets-cloud.github.io/mx/** has the demo video and six
+real agent runs.
+
 mx is one Swift binary that uses only Apple's frameworks. It speaks MCP
 (JSON-RPC 2.0) on stdio, sends nothing over the network and has no
 telemetry.
