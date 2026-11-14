@@ -2106,12 +2106,58 @@ def audit_checks():
           (os.listdir(d), r.stdout[:200]))
 
 
+def finder_rename_group():
+    """fill renames a new Finder folder and the name sticks (fix17): with Finder in front,
+    File > New Folder leaves Finder's inline name editor open on "untitled folder"; fill must
+    close it before renaming, or the next drag commits the old name over the new one. Works
+    in a scratch folder under tests/scratch/ in a Finder window of its own, closed after."""
+    if not gui_idle_gate("finder rename check (New Folder, fill, drag)"):
+        return
+    d = os.path.join(ROOT, "tests", "scratch", f"mx-finder-{os.getpid()}")
+    os.makedirs(d)
+    open(os.path.join(d, "a.pdf"), "w").write("x")
+    name = os.path.basename(d)
+    prev = frontmost()
+    def osa(s):
+        return subprocess.run(["osascript", "-e", s], capture_output=True, text=True)
+    osa(f'tell application "Finder"\nset w to make new Finder window to (POSIX file "{d}" as alias)\n'
+        'set current view of w to icon view\nactivate\nend tell')
+    c = Client()
+    c.request("initialize", {"protocolVersion": "2025-06-18"})
+    w = {"app": "Finder", "window": name}
+    try:
+        c.call("start", title="mx finder rename check", mode="background")
+        time.sleep(1)
+        c.call("menu", path=["File", "New Folder"], **w)
+        time.sleep(1)
+        snap, _ = c.call("snapshot", interactive=False, **w)
+        folder = re.search(r'(e\d+) image "untitled folder"', snap)
+        text, is_err = c.call("fill", ref=folder.group(1), text="Receipts", **w) if folder else ("no folder", True)
+        check("finder: fill renames the new folder", not is_err and "renamed" in text, text)
+        snap, _ = c.call("snapshot", interactive=False, **w)
+        pdf, dest = re.search(r'(e\d+) image "a.pdf"', snap), re.search(r'(e\d+) image "(?:Receipts|untitled folder)"', snap)
+        if pdf and dest:
+            c.call("drag", **{"from": pdf.group(1), "to": dest.group(1)}, **w)
+            time.sleep(1)
+        got = sorted(x for x in os.listdir(d) if not x.startswith("."))
+        inside = os.listdir(os.path.join(d, "Receipts")) if os.path.isdir(os.path.join(d, "Receipts")) else None
+        check("finder: the name sticks after the next drag (no \"untitled folder\")",
+              got == ["Receipts"] and inside == ["a.pdf"], (got, inside))
+        c.call("done", summary="finder rename check")
+    finally:
+        c.close()
+        osa(f'tell application "Finder"\nrepeat with fw in (get every Finder window)\nif name of fw is "{name}" then close fw\nend repeat\nend tell')
+        subprocess.run(["rm", "-rf", "--", d])
+        if prev:
+            osa(f'tell application id "{prev}" to activate')
+
+
 # Check groups `--only` can run on their own (fix10 and later).
 ONLY = {"protocol": protocol_checks, "settle": settle_checks, "diff": with_client(diff_checks), "gate": with_client(gate_table_checks),
         "indicator": indicator_group, "cc": cc_group, "fix11": fix11_group,
         "pill": lambda: fix11_group(borrows=False), "fix12": fix12_group,
         "fix12-idle": lambda: fix12_group(front_eof=False), "fix13": fix13_group,
-        "audit": audit_checks}
+        "audit": audit_checks, "finder": finder_rename_group}
 
 
 if __name__ == "__main__":

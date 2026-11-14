@@ -470,7 +470,7 @@ final class Tools {
             let confirm = args["confirm"] as? Bool ?? false
             try settingsGate(ctx, n.el, "fill \(describe(n))", confirm: confirm)
             if n.role == "AXSlider" || n.role == "AXIncrementor" { return try setLevel(n, text) }
-            if let url = finderItemURL(ctx, n) { return try renameFinderItem(n, url, text) }
+            if let url = finderItemURL(ctx, n) { return try renameFinderItem(ctx, n, url, text) }
             return typing == .keys ? try typeInto(ctx, n, text, confirm: confirm) : try fill(n, text)
         case "key":
             guard let combo = args["key"] as? String else { throw MXError("key needs key, such as cmd+k or return") }
@@ -637,7 +637,7 @@ final class Tools {
     /// fill on a Finder item renames its file, in the same folder, never over another file.
     /// Finder's own rename field exists only while Finder is in front and closes when the
     /// front is handed back, and setting a list view name cell changes only the text on screen.
-    private func renameFinderItem(_ n: Node, _ url: URL, _ name: String) throws -> String {
+    private func renameFinderItem(_ ctx: Ctx, _ n: Node, _ url: URL, _ name: String) throws -> String {
         guard !name.isEmpty, !name.contains("/"), !name.contains(":"), name != ".", name != ".." else {
             throw MXError("a file name can't be empty, . or .., or contain / or :")
         }
@@ -648,12 +648,36 @@ final class Tools {
         if FileManager.default.fileExists(atPath: dest.path) && name.lowercased() != old.lowercased() {
             throw MXError("\(quote(name, 60)) already exists in \(folder.path); not renaming over it")
         }
+        try closeFinderNameEditor(ctx, editing: old)
         show("Rename to \u{201C}\(name.prefix(40))\u{201D}", at: liveFrame(n.el))
         do { try FileManager.default.moveItem(at: url, to: dest) } catch {
             throw MXError("could not rename \(quote(old, 60)): \(error.localizedDescription)")
         }
         actions += 1
+        usleep(300_000)  // let Finder see the change, then check nothing put the old name back
+        guard FileManager.default.fileExists(atPath: dest.path) else {
+            throw MXError("renamed \(quote(old, 60)) to \(quote(name, 60)), but the name didn't stick: Finder put \(quote(old, 60)) back")
+        }
         return "renamed \(quote(old, 60)) to \(quote(name, 60)) in \(folder.path)"
+    }
+
+    /// After File > New Folder (or Rename) with Finder in front, Finder's inline name editor
+    /// is an AXTextField child of the application, holding the old name. Left open, it commits
+    /// that name over mx's rename at the next click or drag. Escape, posted to Finder, cancels it.
+    private func closeFinderNameEditor(_ ctx: Ctx, editing old: String) throws {
+        let app = AXUIElementCreateApplication(ctx.app.processIdentifier)
+        func editor() -> AXUIElement? {
+            ((copyAttr(app, kAXChildrenAttribute) as? [AXUIElement]) ?? []).first {
+                copyAttr($0, kAXRoleAttribute) as? String == "AXTextField" && copyAttr($0, kAXValueAttribute) as? String == old
+            }
+        }
+        guard editor() != nil else { return }
+        post(try parseKey("escape"), to: ctx.app.processIdentifier)
+        let deadline = now() + 1
+        while editor() != nil {
+            guard now() < deadline else { throw MXError("Finder's name editor for \(quote(old, 60)) is open and didn't close on Escape; not renaming") }
+            usleep(50_000)
+        }
     }
 
     /// Posts a key combo to the app after making the target window its key window, and
