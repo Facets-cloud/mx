@@ -1,0 +1,14 @@
+{
+  "name": "mx",
+  "description": "The mx plugin: drive Mac apps through the accessibility API.",
+  "owner": {
+    "name": "Facets Cloud"
+  },
+  "plugins": [
+    {
+      "name": "mx",
+      "source": "./plugin",
+      "description": "Drive Mac apps and the rest of the Mac through the accessibility API, in the background or in front of you."
+    }
+  ]
+}

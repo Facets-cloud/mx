@@ -1,0 +1,13 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift build -c release
+      # The groups that need no Accessibility grant and no GUI.
+      - run: python3 tests/selftest.py --only protocol,gate,settle,diff

@@ -1,0 +1,70 @@
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build both architectures
+        run: scripts/npm-build.sh "$GITHUB_REF_NAME"
+      - name: Test the arm64 build
+        run: MX_BIN=npm/mx-darwin-arm64/bin/mx python3 tests/selftest.py --only protocol,gate,settle,diff
+      - name: Tarballs and checksums
+        run: |
+          mkdir dist
+          for arch in arm64 x64; do
+            tar -czf "dist/mx_darwin_${arch}.tar.gz" -C "npm/mx-darwin-${arch}" bin/mx LICENSE THIRD_PARTY_NOTICES
+          done
+          (cd dist && shasum -a 256 *.tar.gz > checksums.txt)
+      - name: GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --generate-notes
+      - name: Configure .npmrc
+        run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
+      - name: npm publish
+        run: |
+          # Platform packages first: @facets-cloud/mx depends on them.
+          for p in npm/mx-darwin-arm64 npm/mx-darwin-x64; do
+            (cd "$p" && npm publish --access public)
+          done
+          # npm takes minutes to serve a new version. Publishing the launcher
+          # before its binaries are served makes npx install it without them,
+          # so wait (up to 15 minutes).
+          v="${GITHUB_REF_NAME#v}"
+          for p in mx-darwin-arm64 mx-darwin-x64; do
+            for i in $(seq 1 60); do
+              npm view "@facets-cloud/$p@$v" version --prefer-online >/dev/null 2>&1 && break
+              [ "$i" = 60 ] && { echo "@facets-cloud/$p@$v never appeared"; exit 1; }
+              sleep 15
+            done
+          done
+          (cd npm/mx && npm publish --access public)
+      - name: Remove .npmrc
+        if: always()
+        run: rm -f ~/.npmrc
+      - name: Bump the plugin version on main
+        # npm-build.sh set plugin.json's version to the tag. Commit it to main
+        # so `claude plugin update` sees the new release.
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          git checkout -- plugin/.claude-plugin/plugin.json
+          git fetch origin main
+          git checkout -B main origin/main
+          node -e '
+            const fs = require("fs"), f = "plugin/.claude-plugin/plugin.json", v = process.argv[1];
+            const p = JSON.parse(fs.readFileSync(f)); p.version = v;
+            fs.writeFileSync(f, JSON.stringify(p, null, 2) + "\n");
+          ' "$v"
+          git diff --quiet && exit 0
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "plugin $v"
+          git push origin main

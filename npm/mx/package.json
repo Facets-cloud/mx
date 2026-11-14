@@ -1,0 +1,40 @@
+{
+  "name": "@facets-cloud/mx",
+  "version": "0.1.0",
+  "description": "Let coding agents drive your Mac's apps through the accessibility API, in the background or in front of you. An MCP server for Claude, Codex and Cursor.",
+  "license": "MIT",
+  "author": "Facets Cloud",
+  "homepage": "https://github.com/Facets-cloud/mx",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Facets-cloud/mx.git"
+  },
+  "keywords": [
+    "mcp",
+    "macos",
+    "accessibility",
+    "automation",
+    "agents",
+    "claude",
+    "codex"
+  ],
+  "bin": {
+    "mx": "bin/mx.js"
+  },
+  "files": [
+    "bin/mx.js",
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES"
+  ],
+  "os": [
+    "darwin"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "optionalDependencies": {
+    "@facets-cloud/mx-darwin-arm64": "0.1.0",
+    "@facets-cloud/mx-darwin-x64": "0.1.0"
+  }
+}

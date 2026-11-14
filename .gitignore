@@ -1,0 +1,13 @@
+.build/
+.swiftpm/
+.DS_Store
+__pycache__/
+*.tgz
+npm/*/bin/mx
+npm/*/LICENSE
+npm/*/THIRD_PARTY_NOTICES
+npm/mx/README.md
+Sources/mx/Version.swift.orig
+tests/scratch/
+site/recordings/
+npm/node_modules/

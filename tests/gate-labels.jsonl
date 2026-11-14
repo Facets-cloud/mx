@@ -1,0 +1,42 @@
+{"id": 1, "app": "Slack", "window": "general (Channel) - Acme - Slack", "action": "click", "role": "button", "label": "Send now", "key_or_text": "", "label_decision": "confirm"}
+{"id": 2, "app": "Slack", "window": "Alex Kim (DM) - Acme - Slack", "action": "key", "role": "textarea", "label": "Message to Alex Kim", "key_or_text": "return", "label_decision": "confirm"}
+{"id": 3, "app": "Slack", "window": "Alex Kim (DM) - Acme - Slack", "action": "key", "role": "textarea", "label": "Message to Alex Kim", "key_or_text": "cmd+return", "label_decision": "confirm"}
+{"id": 4, "app": "Slack", "window": "general (Channel) - Acme - Slack", "action": "key", "role": "searchbox", "label": "Channel or user name", "key_or_text": "return", "label_decision": "allow"}
+{"id": 5, "app": "Slack", "window": "general (Channel) - Acme - Slack", "action": "key", "role": "textarea", "label": "Message to Alex Kim", "key_or_text": "shift+return", "label_decision": "allow"}
+{"id": 6, "app": "Slack", "window": "general (Channel) - Acme - Slack", "action": "fill", "role": "textarea", "label": "Message to Alex Kim", "key_or_text": "draft: see you at 3", "label_decision": "allow"}
+{"id": 7, "app": "Discord", "window": "#team - Discord", "action": "click", "role": "button", "label": "", "key_or_text": "", "label_decision": "confirm"}
+{"id": 8, "app": "Deploybot", "window": "Release 4.2 - Deploybot", "action": "click", "role": "button", "label": "Ship it", "key_or_text": "", "label_decision": "confirm"}
+{"id": 9, "app": "Slack", "window": "general (Channel) - Acme - Slack", "action": "click", "role": "menuitem", "label": "Archive", "key_or_text": "", "label_decision": "confirm"}
+{"id": 10, "app": "Slack", "window": "general (Channel) - Acme - Slack", "action": "click", "role": "menuitem", "label": "Delete message", "key_or_text": "", "label_decision": "confirm"}
+{"id": 11, "app": "Slack", "window": "random (Channel) - Acme - Slack", "action": "click", "role": "menuitem", "label": "Leave channel", "key_or_text": "", "label_decision": "confirm"}
+{"id": 12, "app": "Mail", "window": "Re: Q3 invoice", "action": "click", "role": "button", "label": "Send", "key_or_text": "", "label_decision": "confirm"}
+{"id": 13, "app": "System Settings", "window": "Displays", "action": "fill", "role": "slider", "label": "Brightness", "key_or_text": "80%", "label_decision": "allow"}
+{"id": 14, "app": "Control Centre", "window": "Control Centre", "action": "fill", "role": "slider", "label": "display brightness", "key_or_text": "100%", "label_decision": "allow"}
+{"id": 15, "app": "System Settings", "window": "Privacy & Security", "action": "click", "role": "checkbox", "label": "Accessibility: Terminal", "key_or_text": "", "label_decision": "confirm"}
+{"id": 16, "app": "System Settings", "window": "Users & Groups", "action": "click", "role": "button", "label": "Add User\u2026", "key_or_text": "", "label_decision": "confirm"}
+{"id": 17, "app": "Keychain Access", "window": "Keychain Access", "action": "click", "role": "row", "label": "login", "key_or_text": "", "label_decision": "block"}
+{"id": 18, "app": "Keychain Access", "window": "Keychain Access", "action": "read", "role": "text", "label": "Password", "key_or_text": "", "label_decision": "block"}
+{"id": 19, "app": "Terminal", "window": "zsh \u2014 80x24", "action": "fill", "role": "textarea", "label": "shell", "key_or_text": "ls -la", "label_decision": "block"}
+{"id": 20, "app": "Terminal", "window": "zsh \u2014 80x24", "action": "key", "role": "textarea", "label": "shell", "key_or_text": "return", "label_decision": "block"}
+{"id": 21, "app": "TextEdit", "window": "Untitled", "action": "fill", "role": "textarea", "label": "document", "key_or_text": "Meeting notes for Monday", "label_decision": "allow"}
+{"id": 22, "app": "Finder", "window": "Downloads", "action": "click", "role": "menuitem", "label": "Move to Trash", "key_or_text": "", "label_decision": "confirm"}
+{"id": 23, "app": "Finder", "window": "Finder", "action": "click", "role": "menuitem", "label": "Empty Trash\u2026", "key_or_text": "", "label_decision": "confirm"}
+{"id": 24, "app": "Finder", "window": "Finder", "action": "click", "role": "menuitem", "label": "Restart\u2026", "key_or_text": "", "label_decision": "confirm"}
+{"id": 25, "app": "Slack", "window": "general (Channel) - Acme - Slack", "action": "click", "role": "radio", "label": "Activity", "key_or_text": "", "label_decision": "allow"}
+{"id": 26, "app": "Slack", "window": "general (Channel) - Acme - Slack", "action": "click", "role": "row", "label": "random", "key_or_text": "", "label_decision": "allow"}
+{"id": 27, "app": "Notes", "window": "Notes", "action": "click", "role": "menubaritem", "label": "File", "key_or_text": "", "label_decision": "allow"}
+{"id": 28, "app": "Safari", "window": "Apple", "action": "click", "role": "tab", "label": "Bookmarks", "key_or_text": "", "label_decision": "allow"}
+{"id": 29, "app": "UserNotificationCenter", "window": "", "action": "click", "role": "button", "label": "Allow", "key_or_text": "", "label_decision": "block"}
+{"id": 30, "app": "universalAccessAuthWarn", "window": "", "action": "click", "role": "button", "label": "Open System Settings", "key_or_text": "", "label_decision": "block"}
+{"id": 31, "app": "Music", "window": "Music", "action": "click", "role": "button", "label": "play", "key_or_text": "", "label_decision": "allow"}
+{"id": 32, "app": "Calendar", "window": "Calendar", "action": "click", "role": "button", "label": "Today", "key_or_text": "", "label_decision": "allow"}
+{"id": 33, "app": "Slack", "window": "general (Channel) - Acme - Slack", "action": "click", "role": "button", "label": "Add reaction", "key_or_text": "", "label_decision": "allow"}
+{"id": 34, "app": "Mail", "window": "Inbox", "action": "click", "role": "row", "label": "Weekly digest", "key_or_text": "", "label_decision": "allow"}
+{"id": 35, "app": "Mail", "window": "Inbox", "action": "click", "role": "button", "label": "Delete", "key_or_text": "", "label_decision": "confirm"}
+{"id": 36, "app": "Notes", "window": "Notes", "action": "fill", "role": "searchbox", "label": "Search", "key_or_text": "groceries", "label_decision": "allow"}
+{"id": 37, "app": "1Password", "window": "1Password", "action": "click", "role": "row", "label": "GitHub", "key_or_text": "", "label_decision": "block"}
+{"id": 38, "app": "System Settings", "window": "Wi-Fi", "action": "click", "role": "checkbox", "label": "Wi-Fi", "key_or_text": "", "label_decision": "allow"}
+{"id": 39, "app": "Brave Browser", "window": "Checkout - Shop", "action": "click", "role": "button", "label": "Place order", "key_or_text": "", "label_decision": "confirm"}
+{"id": 40, "app": "Slack", "window": "general (Channel) - Acme - Slack", "action": "click", "role": "button", "label": "Schedule message", "key_or_text": "", "label_decision": "confirm"}
+{"id": 41, "app": "System Settings", "window": "General", "action": "click", "role": "row", "label": "About", "key_or_text": "", "label_decision": "allow"}
+{"id": 42, "app": "Finder", "window": "Documents", "action": "key", "role": "row", "label": "report.pdf", "key_or_text": "cmd+delete", "label_decision": "confirm"}

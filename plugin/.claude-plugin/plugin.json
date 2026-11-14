@@ -1,0 +1,20 @@
+{
+  "name": "mx",
+  "version": "0.1.0",
+  "description": "Drive Mac apps (Slack, Mail, Notes, Finder, any native or Electron app) and the rest of the Mac through the accessibility API, in the background or in front of you.",
+  "author": {
+    "name": "Facets Cloud"
+  },
+  "homepage": "https://github.com/Facets-cloud/mx",
+  "repository": "https://github.com/Facets-cloud/mx",
+  "license": "MIT",
+  "mcpServers": {
+    "mx": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@facets-cloud/mx"
+      ]
+    }
+  }
+}

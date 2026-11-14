@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mx · for the whole Mac</title>
+<meta name="description" content="mx is an MCP server that lets your coding agent use the apps on your Mac through the accessibility API, in the background while you keep working, or in front of you.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f7f7f4; --bg2: #efefea; --fg: #121212; --muted: #5f5f58; --faint: #9a9a92; --line: #deded7;
+    --card: #ffffff; --term: #121212; --termfg: #e8e8e3; --acc: #2a6ff2; --ok: #1f8a4c; --red: #c23a3a;
+    --glow: rgba(42, 111, 242, .12); --pill: rgba(24, 24, 28, .86); --pillfg: #f1f1ef;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #09090b; --bg2: #101013; --fg: #f1f1ef; --muted: #a0a09a; --faint: #66665f; --line: #222226;
+      --card: #111114; --term: #0d0d10; --termfg: #e8e8e3; --acc: #6f9dff; --ok: #5fd38d; --red: #ff7070;
+      --glow: rgba(111, 157, 255, .14); --pill: rgba(242, 242, 240, .92); --pillfg: #121212;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #09090b; --bg2: #101013; --fg: #f1f1ef; --muted: #a0a09a; --faint: #66665f; --line: #222226;
+    --card: #111114; --term: #0d0d10; --termfg: #e8e8e3; --acc: #6f9dff; --ok: #5fd38d; --red: #ff7070;
+    --glow: rgba(111, 157, 255, .14); --pill: rgba(242, 242, 240, .92); --pillfg: #121212;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body { background: var(--bg); color: var(--fg); font: 17px/1.6 "Inter Tight", -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  code, .mono { font-family: "JetBrains Mono", Menlo, monospace; }
+  a { color: inherit; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+
+  /* Nav */
+  nav { position: sticky; top: 0; z-index: 10; backdrop-filter: blur(12px); background: color-mix(in srgb, var(--bg) 80%, transparent); border-bottom: 1px solid var(--line); }
+  nav .wrap { display: flex; align-items: center; justify-content: space-between; height: 60px; gap: 16px; }
+  .mark { font: 700 20px/1 "JetBrains Mono", monospace; letter-spacing: -0.05em; text-decoration: none; padding: 5px 9px 6px; border: 2px solid var(--acc); border-radius: 9px; }
+  nav .links { display: flex; gap: 22px; font-size: 15px; align-items: center; }
+  nav .links a { color: var(--muted); text-decoration: none; }
+  nav .links a:hover { color: var(--fg); }
+  .theme { font: 500 12px "JetBrains Mono", monospace; color: var(--muted); background: none; border: 1px solid var(--line); border-radius: 99px; padding: 4px 10px; cursor: pointer; }
+
+  /* The indicator: a blue border around a window, a pill with a spinner under it */
+  .spin { flex: none; width: 12px; height: 12px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: spin .9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .pill { display: inline-flex; align-items: center; gap: 8px; font: 500 12.5px/1 "JetBrains Mono", monospace; background: var(--pill); color: var(--pillfg); padding: 7px 12px 7px 10px; border-radius: 99px; box-shadow: 0 6px 20px -6px rgba(0,0,0,.35); white-space: nowrap; }
+
+  /* Hero */
+  .hero { position: relative; padding: 80px 0 56px; overflow: hidden; }
+  .hero::before { content: ""; position: absolute; inset: 0; background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px); background-size: 48px 48px; mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, #000 20%, transparent 75%); opacity: .55; pointer-events: none; }
+  .hero::after { content: ""; position: absolute; left: 50%; top: -200px; width: 900px; height: 600px; transform: translateX(-50%); background: radial-gradient(closest-side, var(--glow), transparent); pointer-events: none; }
+  .hero .wrap { position: relative; z-index: 1; display: grid; grid-template-columns: 1fr 1.1fr; gap: 56px; align-items: center; }
+  .hero .wrap > * { min-width: 0; }
+  .eyebrow { display: inline-flex; align-items: center; gap: 10px; font: 500 13px "JetBrains Mono", monospace; color: var(--muted); border: 1px solid var(--line); border-radius: 99px; padding: 6px 14px; background: var(--card); }
+  .eyebrow i { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 20%, transparent); }
+  .word { margin-top: 28px; display: inline-flex; flex-direction: column; align-items: center; gap: 10px; }
+  .word .box { font: 700 clamp(56px, 8vw, 92px)/1 "JetBrains Mono", monospace; letter-spacing: -0.06em; padding: 10px 26px 16px; border: 3px solid var(--acc); border-radius: 22px; transition: box-shadow .6s ease; }
+  .word.on .box { box-shadow: 0 0 0 6px var(--glow); }
+  .word .pill { opacity: 0; transform: translateY(-6px); transition: opacity .5s ease .35s, transform .5s ease .35s; }
+  .word.on .pill { opacity: 1; transform: none; }
+  h1 { margin-top: 22px; font-size: clamp(28px, 3.4vw, 40px); line-height: 1.15; letter-spacing: -0.022em; font-weight: 700; }
+  .lede { margin-top: 18px; font-size: 18.5px; color: var(--muted); max-width: 540px; }
+  .btn { flex: none; font: 600 14px "Inter Tight", sans-serif; padding: 9px 16px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--fg); cursor: pointer; text-decoration: none; display: inline-flex; gap: 8px; align-items: center; }
+  .btn.primary { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+  .ctas { margin-top: 18px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; font-size: 14px; color: var(--faint); }
+
+  /* Installer: a tab per client, plus a prompt for any agent */
+  .installer { margin-top: 30px; max-width: 640px; background: var(--term); color: var(--termfg); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; text-align: left; }
+  .installer.center { margin: 28px auto 0; border-color: #2a2a2f; background: #000; }
+  .installer .tabs { display: flex; gap: 2px; padding: 6px 6px 0; border-bottom: 1px solid #222226; overflow-x: auto; scrollbar-width: none; }
+  .installer .tabs button { flex: none; font: 500 13px "Inter Tight", sans-serif; color: #8d8d86; background: none; border: 0; padding: 8px 12px; border-radius: 8px 8px 0 0; cursor: pointer; }
+  .installer .tabs button[aria-selected="true"] { color: #f1f1ef; background: #1a1a1e; }
+  .installer .tabs button.ask { color: #6f9dff; }
+  .installer .body { display: flex; align-items: flex-start; gap: 10px; padding: 12px 12px 12px 18px; }
+  .installer pre { flex: 1; min-width: 0; font: 13.5px/1.6 "JetBrains Mono", monospace; overflow-x: auto; white-space: pre; scrollbar-width: none; padding-top: 6px; }
+  .installer pre.prompt { white-space: pre-wrap; max-height: 168px; overflow-y: auto; color: #cfcfca; scrollbar-width: thin; }
+  .installer .btn { background: #222226; color: #f1f1ef; border-color: #2e2e33; }
+  .installer .hint { padding: 0 18px 12px; font-size: 13px; color: #77776f; }
+
+  /* Video frames: a window with mx's border, the pill under it */
+  .framed { position: relative; padding-bottom: 40px; }
+  .framed .win { position: relative; border-radius: 14px; overflow: hidden; background: #0d0d10; aspect-ratio: 16 / 10; outline: 2.5px solid var(--acc); outline-offset: 3px; box-shadow: 0 30px 80px -20px rgba(0,0,0,.35); }
+  .framed .win video { width: 100%; height: 100%; display: block; object-fit: cover; }
+  .framed > .pill { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); }
+  .soon { position: absolute; inset: 0; display: none; align-items: flex-end; justify-content: flex-start; padding: 16px; background-size: cover; background-position: center; }
+  .soon span { font: 500 12px "JetBrains Mono", monospace; color: #e8e8e3; background: rgba(0,0,0,.55); padding: 5px 10px; border-radius: 6px; }
+  .missing .soon { display: flex; }
+  .missing video { visibility: hidden; }
+
+  /* Sections */
+  section { padding: 104px 0 0; }
+  .kicker { font: 500 13px "JetBrains Mono", monospace; color: var(--acc); letter-spacing: .02em; }
+  h2 { margin-top: 12px; font-size: clamp(30px, 4vw, 44px); line-height: 1.1; letter-spacing: -0.025em; font-weight: 700; max-width: 760px; }
+  .sub { margin-top: 16px; color: var(--muted); font-size: 18px; max-width: 680px; }
+  .sub code, .use p code, .mode code, .faq code { font-size: .86em; }
+
+  .stats { margin-top: 8px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .stat { border-top: 1px solid var(--line); padding-top: 14px; }
+  .stat b { display: block; font: 700 28px "JetBrains Mono", monospace; letter-spacing: -0.04em; }
+  .stat span { font-size: 14px; color: var(--muted); }
+
+  /* Example runs: one player, a list of runs beside it */
+  .runs { margin-top: 40px; display: grid; grid-template-columns: 1.7fr 1fr; gap: 16px; align-items: start; }
+  .runs .framed { position: sticky; top: 80px; }
+  .runs-list { list-style: none; display: grid; gap: 8px; }
+  .runs-list button { width: 100%; text-align: left; display: grid; gap: 4px; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--fg); font: inherit; cursor: pointer; }
+  .runs-list button:hover { border-color: color-mix(in srgb, var(--acc) 40%, var(--line)); }
+  .runs-list button[aria-pressed="true"] { border-color: var(--acc); box-shadow: 0 0 0 3px var(--glow); }
+  .runs-list b { font-size: 16px; }
+  .runs-list span { font-size: 14px; color: var(--muted); line-height: 1.45; }
+  .runs-list i { font: 12px "JetBrains Mono", monospace; color: var(--acc); font-style: normal; }
+
+  /* How it works */
+  .exec { margin-top: 44px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .cmp { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 26px; min-width: 0; }
+  .cmp .lbl { font: 500 12px "JetBrains Mono", monospace; color: var(--faint); text-transform: uppercase; letter-spacing: .1em; }
+  .cmp pre { margin-top: 14px; font: 14px/1.7 "JetBrains Mono", monospace; white-space: pre; overflow-x: auto; scrollbar-width: none; }
+  .cmp pre .c { color: var(--faint); }
+  .cmp pre .h { color: var(--acc); }
+  .cmp pre .add { color: var(--ok); }
+  .cmp pre .del { color: var(--red); }
+  .cmp p { margin-top: 14px; color: var(--muted); font-size: 16px; }
+  .cmp.hi { border-color: color-mix(in srgb, var(--acc) 45%, var(--line)); box-shadow: 0 0 0 4px var(--glow); }
+  .chain { margin-top: 16px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 30px 26px; display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; align-items: center; gap: 14px; }
+  .node { border: 1px solid var(--line); border-radius: 12px; padding: 18px; background: var(--bg2); }
+  .node h4 { font-size: 16px; }
+  .node p { font-size: 14px; color: var(--muted); margin-top: 4px; }
+  .node .chips { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .node .chips span { font: 12px "JetBrains Mono", monospace; padding: 3px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--card); color: var(--muted); }
+  .node.mid { border: 2px solid var(--acc); }
+  .node.mid h4 { font-family: "JetBrains Mono", monospace; }
+  .arrow { font: 12px "JetBrains Mono", monospace; color: var(--faint); text-align: center; }
+  .arrow::after { content: ""; display: block; width: 56px; height: 1px; margin: 6px auto 0; background: linear-gradient(90deg, var(--faint), var(--acc)); }
+
+  /* Reach */
+  .uses { margin-top: 40px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .use { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 10px; }
+  .use .tools { display: flex; gap: 6px; flex-wrap: wrap; }
+  .use .tools code { font-size: 12px; padding: 3px 8px; border-radius: 6px; background: var(--bg2); color: var(--acc); border: 1px solid var(--line); }
+  .use h3 { font-size: 19px; letter-spacing: -0.02em; }
+  .use p { color: var(--muted); font-size: 15.5px; }
+  .use q { display: block; font: 13px/1.55 "JetBrains Mono", monospace; color: var(--fg); background: var(--bg2); border-radius: 8px; padding: 10px 12px; quotes: none; margin-top: auto; }
+  .use q::before { content: "> "; color: var(--acc); }
+
+  /* Modes */
+  .modes { margin-top: 40px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .mode { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 26px; }
+  .mode.hi { border-color: color-mix(in srgb, var(--acc) 45%, var(--line)); box-shadow: 0 0 0 4px var(--glow); }
+  .mode .lbl { font: 500 12px "JetBrains Mono", monospace; color: var(--faint); text-transform: uppercase; letter-spacing: .1em; }
+  .mode h3 { margin-top: 8px; font-size: 21px; letter-spacing: -0.02em; }
+  .mode .say { margin-top: 6px; font: 13px "JetBrains Mono", monospace; color: var(--acc); }
+  .mode ul { margin-top: 14px; list-style: none; display: grid; gap: 8px; color: var(--muted); font-size: 15.5px; }
+  .mode li::before { content: "→ "; color: var(--acc); }
+  .mode .time { margin-top: 16px; font: 700 26px "JetBrains Mono", monospace; letter-spacing: -0.04em; }
+  .mode .time span { font: 400 14px "Inter Tight", sans-serif; color: var(--muted); letter-spacing: 0; margin-left: 6px; }
+
+  /* Indicator demo: two windows, the border and pill on the one mx works in */
+  .desk { margin-top: 16px; position: relative; border-radius: 16px; border: 1px solid var(--line); background: linear-gradient(135deg, color-mix(in srgb, var(--acc) 10%, var(--bg2)), var(--bg2)); height: 360px; overflow: hidden; }
+  .desk .w { position: absolute; border-radius: 10px; background: var(--card); border: 1px solid var(--line); box-shadow: 0 16px 40px -16px rgba(0,0,0,.3); padding: 34px 16px 16px; }
+  .desk .w::before { content: ""; position: absolute; top: 12px; left: 14px; width: 42px; height: 10px; background: radial-gradient(circle at 5px 5px, #ff5f57 4.5px, transparent 5px), radial-gradient(circle at 21px 5px, #febc2e 4.5px, transparent 5px), radial-gradient(circle at 37px 5px, #28c840 4.5px, transparent 5px); }
+  .desk .w .t { position: absolute; top: 8px; left: 0; right: 0; text-align: center; font-size: 12.5px; color: var(--muted); }
+  .desk .w .ln { height: 9px; border-radius: 5px; background: var(--bg2); margin-bottom: 10px; }
+  .desk .target { left: 6%; top: 40px; width: 50%; height: 230px; outline: 2.5px solid var(--acc); outline-offset: 3px; }
+  .desk .yours { right: 5%; top: 70px; width: 38%; height: 220px; }
+  .desk .yours .caret { display: inline-block; width: 2px; height: 16px; background: var(--fg); animation: blink 1s steps(1) infinite; vertical-align: middle; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .desk .pill { position: absolute; left: calc(6% + 25%); top: 286px; transform: translateX(-50%); }
+  .desk figcaption { position: absolute; left: 16px; bottom: 12px; font-size: 13.5px; color: var(--muted); }
+
+  .settings { margin-top: 16px; display: grid; grid-template-columns: 1fr 1.25fr; gap: 16px; align-items: start; }
+  .vars { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 22px 24px; }
+  .vars table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  .vars th { text-align: left; font: 500 12px "JetBrains Mono", monospace; color: var(--faint); text-transform: uppercase; letter-spacing: .08em; padding-bottom: 8px; }
+  .vars td { padding: 9px 0; border-top: 1px solid var(--line); vertical-align: top; color: var(--muted); }
+  .vars td:first-child { padding-right: 14px; white-space: nowrap; }
+  .vars td code { font-size: 13px; color: var(--fg); }
+  .vars p { margin-top: 12px; font-size: 14px; color: var(--muted); }
+  .settings .installer { margin-top: 0; max-width: none; }
+
+  /* Setup */
+  .steps { margin-top: 40px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; counter-reset: s; }
+  .step { counter-increment: s; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 26px; }
+  .step::before { content: "0" counter(s); font: 700 13px "JetBrains Mono", monospace; color: var(--acc); }
+  .step h3 { margin-top: 10px; font-size: 19px; letter-spacing: -0.02em; }
+  .step p { margin-top: 8px; color: var(--muted); font-size: 15.5px; }
+  .step code { font-size: 12.5px; background: var(--bg2); padding: 2px 6px; border-radius: 5px; word-break: break-all; }
+
+  /* Tools */
+  .tools-grid { margin-top: 40px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .group { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 22px; }
+  .group h3 { font-size: 15px; display: flex; justify-content: space-between; }
+  .group h3 span { font: 500 12px "JetBrains Mono", monospace; color: var(--faint); }
+  .group ul { list-style: none; margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .group li { font: 13px "JetBrains Mono", monospace; padding: 4px 9px; border-radius: 7px; background: var(--bg2); border: 1px solid var(--line); }
+  .group.mac { border-color: color-mix(in srgb, var(--acc) 45%, var(--line)); }
+  .group.mac li { color: var(--acc); }
+
+  /* Safety */
+  .trust { margin-top: 40px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px 24px; }
+  .trust div { border-top: 2px solid var(--fg); padding-top: 16px; }
+  .trust h3 { font-size: 18px; }
+  .trust p { margin-top: 8px; color: var(--muted); font-size: 15.5px; }
+  .trust code { font-size: 13px; }
+
+  /* FAQ */
+  .faq { margin-top: 36px; display: grid; gap: 10px; max-width: 860px; }
+  .faq details { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; }
+  .faq summary { cursor: pointer; font-weight: 600; font-size: 17px; list-style: none; display: flex; justify-content: space-between; gap: 16px; }
+  .faq summary::after { content: "+"; font: 500 18px "JetBrains Mono", monospace; color: var(--acc); }
+  .faq details[open] summary::after { content: "−"; }
+  .faq p { margin-top: 10px; color: var(--muted); font-size: 16px; }
+
+  /* Final CTA */
+  .end { margin: 120px 0 0; padding: 72px 32px; border-radius: 24px; background: var(--term); color: var(--termfg); text-align: center; position: relative; overflow: hidden; }
+  .end::before { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse 60% 80% at 50% 0%, rgba(111,157,255,.22), transparent 70%); }
+  .end > * { position: relative; }
+  .end .big { display: inline-block; font: 700 clamp(40px, 6vw, 72px)/1 "JetBrains Mono", monospace; letter-spacing: -0.06em; border: 3px solid #6f9dff; border-radius: 20px; padding: 8px 24px 14px; }
+  .end p { margin-top: 16px; color: #a0a09a; }
+
+  footer { margin: 48px 0 40px; display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; font-size: 14px; color: var(--faint); }
+  footer a { color: var(--muted); text-decoration: none; margin-left: 18px; }
+
+  @media (max-width: 900px) {
+    .hero .wrap, .exec, .runs, .modes, .settings, .steps { grid-template-columns: 1fr; }
+    .uses, .tools-grid, .stats { grid-template-columns: repeat(2, 1fr); }
+    .trust { grid-template-columns: 1fr; }
+    .chain { grid-template-columns: 1fr; }
+    .arrow::after { width: 1px; height: 22px; background: linear-gradient(180deg, var(--faint), var(--acc)); }
+    .hero { padding-top: 48px; }
+    .runs .framed { position: static; }
+  }
+  @media (max-width: 560px) {
+    nav .links a.opt { display: none; }
+    .uses, .tools-grid { grid-template-columns: 1fr; }
+    .ctas span { display: none; }
+    .end { padding: 52px 18px; }
+    .desk { height: 320px; }
+    .desk .target { width: 72%; height: 200px; }
+    .desk .yours { width: 46%; top: 120px; height: 150px; }
+    .desk .pill { left: calc(6% + 36%); top: 256px; }
+    .desk figcaption { right: 16px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .spin, .desk .yours .caret { animation: none; }
+    .word .box, .word .pill { transition: none; }
+  }
+</style>
+</head>
+<body>
+<nav>
+  <div class="wrap">
+    <a class="mark" href="#">mx</a>
+    <div class="links"><a class="opt" href="#runs">Runs</a><a class="opt" href="#how">How it works</a><a class="opt" href="#modes">Modes</a><a class="opt" href="#safety">Safety</a><a href="#setup">Setup</a><a href="https://github.com/Facets-cloud/mx">GitHub</a><button class="theme" id="theme" type="button" aria-label="Switch theme">auto</button></div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <div>
+      <span class="eyebrow"><i></i>MCP server · v0.1 · macOS 14+</span>
+      <div><div class="word" id="word"><span class="box">mx</span><span class="pill"><span class="spin"></span>mx · for the whole Mac</span></div></div>
+      <h1>Your agent uses the apps on your Mac. You keep using yours.</h1>
+      <p class="lede">mx gives Claude Code, Codex and Cursor the Mac's accessibility tree: Slack, Mail, Notes, Finder, Control Center, menus and System Settings. It works in the background by default, and in front of you when you ask.</p>
+      <div class="installer"></div>
+      <div class="ctas"><a class="btn primary" href="#runs">See it run</a><a class="btn" href="#setup">Setup in 3 steps</a><span>MIT · no telemetry · one Swift binary</span></div>
+    </div>
+
+    <div class="framed" id="hero">
+      <div class="win"><video src="demo.mp4" poster="poster.jpg" controls playsinline muted preload="metadata"></video><div class="soon" style="background-image:url(poster.jpg)"></div></div>
+      <span class="pill"><span class="spin"></span>mx · Brightness to 100%</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="stats">
+    <div class="stat"><b>117 ms</b><span>to snapshot a Slack window of 268 elements</span></div>
+    <div class="stat"><b>~200 ms</b><span>for a fill, settle included</span></div>
+    <div class="stat"><b>0.2 to 0.4 s</b><span>to borrow the front for a click, then hand it back</span></div>
+    <div class="stat"><b>1.0 s</b><span>to read and move the brightness slider, panel closed</span></div>
+  </div>
+
+  <section id="runs">
+    <div class="kicker">// example runs</div>
+    <h2>One prompt each, on a real Mac.</h2>
+    <p class="sub">Each clip is a single prompt to Claude with mx. The border marks the window mx works in, and the pill under it says what it is doing. Nothing was sent, posted or deleted.</p>
+    <div class="runs">
+      <div class="framed" id="runbox">
+        <div class="win"><video id="runvid" controls playsinline muted preload="metadata"></video><div class="soon" id="runsoon"></div></div>
+        <span class="pill" id="runpill"><span class="spin"></span>mx · Working on it</span>
+      </div>
+      <ol class="runs-list" id="runlist">
+        <li><button type="button" data-v="brightness" data-pill="Brightness to 100%"><b>Brightness to 100%</b><span>"Set my screen brightness to 100% and tell me what it was." Opens Control Center, reads the slider, sets it, reads it back.</span><i>Control Center · batch, fill, read</i></button></li>
+        <li><button type="button" data-v="notes" data-pill="Standup notes into Notes"><b>Standup notes into Notes</b><span>"Put today's standup notes into a new note in Notes." New note, title, body, in the background.</span><i>Notes · menu, fill</i></button></li>
+        <li><button type="button" data-v="finder" data-pill="PDFs into Receipts"><b>PDFs into a Receipts folder</b><span>"Move the PDFs in ~/Demo/Downloads into a folder called Receipts." Makes the folder, selects the PDFs, moves them.</span><i>Finder · menu, click, drag</i></button></li>
+        <li><button type="button" data-v="settings" data-pill="Dark mode on, then off"><b>Dark mode on, then off</b><span>"Turn on dark mode, then turn it back off." Opens Appearance in System Settings and flips it twice.</span><i>System Settings · open, click</i></button></li>
+        <li><button type="button" data-v="textedit" data-pill="Draft a release note"><b>A release note, while you work</b><span>"Draft a release note in TextEdit while I keep working." Background mode: only the pill shows, and your app stays in front.</span><i>TextEdit · background mode</i></button></li>
+        <li><button type="button" data-v="watch" data-pill="Fill the form slowly"><b>Fill a form, slowly</b><span>"Show me: fill this form slowly." Watch mode: the pointer glides to each field and the real mouse follows.</span><i>Watch mode · batch</i></button></li>
+      </ol>
+    </div>
+  </section>
+
+  <section id="how">
+    <div class="kicker">// how it works</div>
+    <h2>Text the agent can act on, not pixels it has to guess at.</h2>
+    <p class="sub">Every Mac app publishes an accessibility tree for VoiceOver. mx reads it, gives each control a ref, and acts through it: press, set a value, post a key. After each action it waits for the window to settle and returns only what changed.</p>
+
+    <div class="exec">
+      <div class="cmp">
+        <div class="lbl">snapshot app=Slack</div>
+        <pre><span class="c"># one line per control, 268 elements in 117 ms</span>
+e9  searchbox "Channel or user name"
+e14 row "general"
+e15 row "Priya"
+e41 textarea "Message #general"
+e42 button "Send"   <span class="c"># needs confirm</span></pre>
+        <p>The agent acts by ref (<code>click e15</code>) or by role and name (<code>row "Priya"</code>), which waits up to 3 s for the element, so one <code>batch</code> can cross several screens.</p>
+      </div>
+      <div class="cmp hi">
+        <div class="lbl">fill e9 "Priya", key down, key return</div>
+        <pre><span class="add">+ e60 row "Priya"</span>
+<span class="del">- e14</span>
+<span class="h">~</span> e41 textarea "Message Priya"
+title: Priya (DM) - Slack
+<span class="c"># 3 steps, one call, Slack stayed behind your app</span></pre>
+        <p>A diff instead of a new tree. Refs stay the same while an element stays on screen, so the agent rarely snapshots twice.</p>
+      </div>
+    </div>
+
+    <div class="chain">
+      <div class="node"><h4>Your agent</h4><p>calls mx as an MCP server</p><div class="chips"><span>Claude Code</span><span>Codex</span><span>Cursor</span><span>Claude Desktop</span></div></div>
+      <div class="arrow">MCP · stdio</div>
+      <div class="node mid"><h4>mx</h4><p>one Swift binary. Borrows the front only for a real mouse click or a cmd shortcut, then hands it back.</p></div>
+      <div class="arrow">accessibility API</div>
+      <div class="node"><h4>Your Mac</h4><p>the apps you have open, signed in</p><div class="chips"><span>any app</span><span>Control Center</span><span>menus</span><span>Dock</span><span>Settings</span></div></div>
+    </div>
+  </section>
+
+  <section id="reach">
+    <div class="kicker">// for the whole Mac</div>
+    <h2>Not one app. The whole Mac.</h2>
+    <p class="sub">Native apps, Electron apps, and the parts of macOS that aren't apps at all.</p>
+    <div class="uses">
+      <div class="use"><div class="tools"><code>snapshot</code><code>fill</code><code>key</code></div><h3>Any app with a window</h3><p>Native or Electron. mx turns on an Electron app's tree the first time it touches it.</p><q>reply to Priya's last message in Slack, show me first</q></div>
+      <div class="use"><div class="tools"><code>app system</code><code>fill</code></div><h3>Control Center</h3><p>Sliders read as percents and toggles as on or off. mx opens the panel when it's closed.</p><q>turn the volume down a bit</q></div>
+      <div class="use"><div class="tools"><code>menu</code></div><h3>Menus</h3><p>Any command by its titles, such as View then Zoom In, without opening the menu where the app allows it.</p><q>export this note as a PDF</q></div>
+      <div class="use"><div class="tools"><code>open</code><code>click</code></div><h3>System Settings</h3><p><code>settings:displays</code> and 18 other panes. Reading is free. Sensitive panes need your yes.</p><q>is my Mac set to sleep after 10 minutes?</q></div>
+      <div class="use"><div class="tools"><code>window</code><code>app</code></div><h3>Windows and the Dock</h3><p>List, move, resize, minimize, fullscreen. Launch, hide and quit apps.</p><q>put Notes and Safari side by side</q></div>
+      <div class="use"><div class="tools"><code>scope windows</code><code>fill</code></div><h3>Dialogs and sheets</h3><p>Open and Save panels show up as their own windows, ready to fill.</p><q>save this as receipts-may.txt on the Desktop</q></div>
+    </div>
+  </section>
+
+  <section id="modes">
+    <div class="kicker">// background, front or watch</div>
+    <h2>Say how you want it done.</h2>
+    <p class="sub">Your words pick the mode for each job. The agent passes it to mx's <code>start</code> tool, and can switch halfway through.</p>
+    <div class="modes">
+      <div class="mode hi">
+        <div class="lbl">Default</div>
+        <h3>Background</h3>
+        <div class="say">"get the details and send them to Priya"</div>
+        <ul>
+          <li>You keep typing in your own app.</li>
+          <li>mx never raises the app it works in.</li>
+          <li>A click with no press action, or a cmd shortcut, borrows the front for a few hundred ms, after you pause typing.</li>
+        </ul>
+        <div class="time">1.65 s<span>for a 4-step batch</span></div>
+      </div>
+      <div class="mode">
+        <div class="lbl">To see it</div>
+        <h3>Front</h3>
+        <div class="say">"show me", "do it in front of me"</div>
+        <ul>
+          <li>The app comes forward and stays there.</li>
+          <li>A pointer with the step tag shows where mx acts.</li>
+          <li>Full speed.</li>
+        </ul>
+      </div>
+      <div class="mode">
+        <div class="lbl">To follow along</div>
+        <h3>Watch</h3>
+        <div class="say">"let me watch", "go slowly"</div>
+        <ul>
+          <li>The pointer glides to each target and the real mouse follows.</li>
+          <li>Batch steps pause, and the tag shows the step, such as 3/7.</li>
+        </ul>
+        <div class="time">4.15 s<span>for the same batch</span></div>
+      </div>
+    </div>
+
+    <figure class="desk" aria-label="Two windows. The left one, which mx works in, has a blue border and a pill under it that reads mx, Paste 24 characters. The right one is yours, with a blinking caret.">
+      <div class="w target"><span class="t">Release notes.txt</span><div class="ln" style="width:70%"></div><div class="ln" style="width:92%"></div><div class="ln" style="width:56%"></div><div class="ln" style="width:84%"></div></div>
+      <div class="w yours"><span class="t">Your app</span><div class="ln" style="width:80%"></div><div class="ln" style="width:60%"></div>you keep typing here<span class="caret"></span></div>
+      <span class="pill"><span class="spin"></span>mx · Paste 24 characters</span>
+      <figcaption>The border sits just above the window mx works in, so your windows still cover it. Screenshots leave it out.</figcaption>
+    </figure>
+
+    <div class="settings">
+      <div class="vars">
+        <p style="margin:0 0 14px;font-size:16px;color:var(--fg)"><b>Just ask your agent.</b> "Show me", "let me watch", "this box ignores pasted text": the agent sets the mode for that job. Nothing to configure.</p>
+        <table>
+          <tr><th>Default</th><th>For power users: what mx does when the agent doesn't say</th></tr>
+          <tr><td><code>MX_MODE</code></td><td><code>background</code> (default), <code>front</code> or <code>watch</code>.</td></tr>
+          <tr><td><code>MX_TYPING</code></td><td><code>paste</code> (default) puts text in at once. <code>keys</code> types key by key, for chat boxes and autocompletes that ignore pasted text.</td></tr>
+        </table>
+        <p>Set these where your agent starts mx, then restart the agent. What the agent passes to <code>start</code> wins.</p>
+      </div>
+      <div class="installer" data-set="modes"></div>
+    </div>
+  </section>
+
+  <section id="setup">
+    <div class="kicker">// setup</div>
+    <h2>Three steps, once.</h2>
+    <div class="steps">
+      <div class="step"><h3>Add the server</h3><p>Claude Code: the plugin at the top, which adds the mx skill too. Codex, Cursor and Claude Desktop: the <code>npx -y @facets-cloud/mx</code> server entry.</p></div>
+      <div class="step"><h3>Grant Accessibility</h3><p>macOS gives it to the app that starts mx: your terminal, editor, Claude Desktop or Cursor. System Settings > Privacy &amp; Security > Accessibility. Add Screen Recording for screenshots.</p></div>
+      <div class="step"><h3>Check it</h3><p>Run <code>npx -y @facets-cloud/mx doctor</code>, or ask the agent to. It names the app to turn on and what's missing, then restart that app.</p></div>
+    </div>
+  </section>
+
+  <section id="tools">
+    <div class="kicker">// 17 tools</div>
+    <h2>Everything you'd do with the keyboard and mouse.</h2>
+    <p class="sub">Snapshot, act by ref or by role and name, read the diff. <code>batch</code> runs a whole plan in one call and stops at the first failure.</p>
+    <div class="tools-grid">
+      <div class="group"><h3>Session <span>2</span></h3><ul><li>start</li><li>done</li></ul></div>
+      <div class="group"><h3>Read <span>4</span></h3><ul><li>list_apps</li><li>snapshot</li><li>read</li><li>screenshot</li></ul></div>
+      <div class="group"><h3>Act <span>6</span></h3><ul><li>click</li><li>fill</li><li>key</li><li>batch</li><li>scroll</li><li>drag</li></ul></div>
+      <div class="group mac"><h3>The rest of the Mac <span>5</span></h3><ul><li>menu</li><li>window</li><li>app</li><li>open</li><li>clipboard</li></ul></div>
+    </div>
+  </section>
+
+  <section id="safety">
+    <div class="kicker">// before you install</div>
+    <h2>It acts as you. Plan for that.</h2>
+    <div class="trust">
+      <div><h3>The grant is broad</h3><p>Accessibility lets the granted app, and anything it runs, read and drive every app. mx's rules work inside that grant. They don't shrink it.</p></div>
+      <div><h3>It asks before it sends</h3><p>Send, post, delete, pay, submit, Return in a message box, a sensitive Settings pane: mx refuses unless the call passes <code>confirm</code>, and the agent is told to ask you first.</p></div>
+      <div><h3>Off limits</h3><p>Keychain Access, password managers, terminals and password fields. Permission prompts are refused even with <code>confirm</code>, so you answer those.</p></div>
+      <div><h3>App text is data</h3><p>A message or email that tells the agent to do something is content to report to you, not an instruction to follow.</p></div>
+      <div><h3>You can see it</h3><p>The border marks the window mx works in. The pill or pointer shows each step as it happens.</p></div>
+      <div><h3>Local only</h3><p>mx talks to your agent on stdio. No port, no network calls, no telemetry. <a href="https://github.com/Facets-cloud/mx/blob/main/SECURITY.md">SECURITY.md</a> has the threat model.</p></div>
+    </div>
+  </section>
+
+  <section id="faq">
+    <div class="kicker">// faq</div>
+    <h2>Questions.</h2>
+    <div class="faq">
+      <details><summary>How is this different from computer use with screenshots?</summary><p>Screenshot agents see pixels: every step costs an image and a guess at coordinates, the app has to be in front, and the agent moves your mouse. mx reads the controls as text with exact refs, works behind your windows, and takes a screenshot only when the layout matters.</p></details>
+      <details><summary>Why not AppleScript?</summary><p>AppleScript reaches only apps that publish a scripting dictionary, each with its own vocabulary, and Electron apps such as Slack publish none. Every app has an accessibility tree, and mx needs one grant instead of an Automation prompt per app.</p></details>
+      <details><summary>Will it take over my mouse and keyboard?</summary><p>Not in background mode. Presses, fills and plain keys go to the app directly. A real mouse click or a cmd shortcut borrows the front for 200 to 400 ms and puts your app and cursor back, and mx waits until you pause typing first. Front and watch modes take the front because you asked to see it.</p></details>
+      <details><summary>Which app do I grant Accessibility to?</summary><p>The one that starts mx: your terminal for Claude Code or Codex, or Claude Desktop or Cursor. <code>mx doctor</code> names it. Restart that app after granting.</p></details>
+      <details><summary>Does it send my data anywhere?</summary><p>No. mx answers your agent on stdio and makes no network calls. What the agent reads goes to your agent's model, the same as anything else it reads.</p></details>
+      <details><summary>Does it work on Intel Macs?</summary><p>Yes. npm installs the arm64 or x64 build to match your Mac. macOS 14 or later.</p></details>
+      <details><summary>What can't it do?</summary><p>It can't unlock the Mac or answer permission prompts, it won't type into password fields, and screenshots need the window on the current Space. The binary isn't signed or notarized yet.</p></details>
+    </div>
+  </section>
+
+  <div class="end">
+    <div class="big">mx</div>
+    <p>For the whole Mac. One command to add it, or paste one prompt into your agent and let it set mx up.</p>
+    <div class="installer center"></div>
+  </div>
+
+  <footer>
+    <span>mx · MIT · Facets Cloud</span>
+    <span><a href="https://www.npmjs.com/package/@facets-cloud/mx">npm</a><a href="https://github.com/Facets-cloud/mx">GitHub</a></span>
+  </footer>
+</main>
+
+<script>
+  // Theme: auto (follows macOS), light, dark
+  const themeBtn = document.getElementById("theme");
+  const THEMES = ["auto", "light", "dark"];
+  const setTheme = (t) => {
+    if (t === "auto") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.dataset.theme = t;
+    themeBtn.textContent = t;
+    try { localStorage.setItem("mx-theme", t); } catch {}
+  };
+  let saved = "auto";
+  try { saved = localStorage.getItem("mx-theme") || "auto"; } catch {}
+  setTheme(THEMES.includes(saved) ? saved : "auto");
+  themeBtn.addEventListener("click", () => setTheme(THEMES[(THEMES.indexOf(themeBtn.textContent) + 1) % 3]));
+
+  // Install tabs: a command per client, or a prompt any agent can follow
+  const PROMPT = `Install mx (npm package @facets-cloud/mx) for me. It's an MCP server that lets you drive the apps on my Mac through the accessibility API.
+
+1. Add it for the app you're running in:
+   - Claude Code: claude plugin marketplace add Facets-cloud/mx, then claude plugin install mx@mx (or, server only: claude mcp add -s user mx -- npx -y @facets-cloud/mx)
+   - Codex: add [mcp_servers.mx] with command = "npx" and args = ["-y", "@facets-cloud/mx"] to ~/.codex/config.toml
+   - Claude Desktop or Cursor: add {"mx": {"command": "npx", "args": ["-y", "@facets-cloud/mx"]}} under mcpServers in its MCP config
+2. Run npx -y @facets-cloud/mx doctor. Tell me which app it names, and to turn it on in System Settings > Privacy & Security > Accessibility, plus Screen & System Audio Recording if I want screenshots.
+3. Tell me mx works in the background by default, and that I can say "show me" or "let me watch" to see a job in front of me.
+4. Tell me to restart this app, then run doctor again and explain what it reports.`;
+  const TABS = [
+    ["Claude Code plugin", "claude plugin marketplace add Facets-cloud/mx\nclaude plugin install mx@mx", "Adds the server and the mx skill. Then grant Accessibility and restart."],
+    ["Claude Code", "claude mcp add -s user mx -- npx -y @facets-cloud/mx", "Server only. Then grant Accessibility to your terminal and restart."],
+    ["Codex", '[mcp_servers.mx]\ncommand = "npx"\nargs = ["-y", "@facets-cloud/mx"]', "In ~/.codex/config.toml. Then grant Accessibility to your terminal."],
+    ["Cursor / Desktop", '{ "mcpServers": { "mx": { "command": "npx", "args": ["-y", "@facets-cloud/mx"] } } }', "In ~/.cursor/mcp.json or claude_desktop_config.json. Grant Accessibility to that app."],
+    ["Ask your agent", PROMPT, "Paste this into any agent. It installs mx and walks you through the rest."],
+  ];
+  const MODE_TABS = [
+    ["Claude Code", "claude mcp remove mx -s user\nclaude mcp add -s user mx -e MX_MODE=front -- npx -y @facets-cloud/mx", "Swap or add -e MX_TYPING=keys. Restart Claude Code after."],
+    ["Codex", '[mcp_servers.mx]\ncommand = "npx"\nargs = ["-y", "@facets-cloud/mx"]\nenv = { MX_MODE = "front" }', "In ~/.codex/config.toml. Restart Codex after."],
+    ["Cursor / Desktop", '{ "mcpServers": { "mx": {\n  "command": "npx", "args": ["-y", "@facets-cloud/mx"],\n  "env": { "MX_MODE": "front" } } } }', "The mx entry in ~/.cursor/mcp.json or claude_desktop_config.json."],
+  ];
+  document.querySelectorAll(".installer").forEach((box) => {
+    const set = box.dataset.set === "modes" ? MODE_TABS : TABS, ask = set === TABS ? 4 : -1;
+    box.innerHTML = '<div class="tabs" role="tablist"></div><div class="body"><pre></pre><button class="btn" type="button">Copy</button></div><div class="hint"></div>';
+    const [tabs, pre, btn, hint] = [box.querySelector(".tabs"), box.querySelector("pre"), box.querySelector(".btn"), box.querySelector(".hint")];
+    const show = (i) => {
+      tabs.querySelectorAll("button").forEach((b, j) => b.setAttribute("aria-selected", String(i === j)));
+      pre.textContent = set[i][1];
+      pre.className = i === ask ? "prompt" : "";
+      hint.textContent = set[i][2];
+      btn.textContent = i === ask ? "Copy prompt" : "Copy";
+    };
+    set.forEach(([name], i) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.role = "tab";
+      b.textContent = name;
+      if (i === ask) b.className = "ask";
+      b.addEventListener("click", () => show(i));
+      tabs.append(b);
+    });
+    btn.addEventListener("click", async () => {
+      const label = btn.textContent;
+      try {
+        await navigator.clipboard.writeText(pre.textContent);
+        btn.textContent = "Copied";
+      } catch {
+        btn.textContent = "Select it";
+      }
+      setTimeout(() => (btn.textContent = label), 1600);
+    });
+    show(0);
+  });
+
+  // A video that isn't recorded yet shows its poster with a note instead of a broken player
+  const watchMissing = (video, box) => {
+    video.addEventListener("error", () => box.classList.add("missing"));
+    video.addEventListener("loadeddata", () => box.classList.remove("missing"));
+    // The hero's load can fail before this script runs.
+    if (video.getAttribute("src") && (video.error || video.networkState === HTMLMediaElement.NETWORK_NO_SOURCE)) box.classList.add("missing");
+  };
+  watchMissing(document.querySelector("#hero video"), document.getElementById("hero"));
+
+  // Example runs: the list picks what the player shows
+  const runvid = document.getElementById("runvid"), runbox = document.getElementById("runbox");
+  const runsoon = document.getElementById("runsoon"), runpill = document.getElementById("runpill");
+  watchMissing(runvid, runbox);
+  const runBtns = [...document.querySelectorAll("#runlist button")];
+  const pick = (btn, play) => {
+    runBtns.forEach((b) => b.setAttribute("aria-pressed", String(b === btn)));
+    runbox.classList.remove("missing");
+    runvid.src = "runs/" + btn.dataset.v + ".mp4";
+    runvid.poster = "runs/" + btn.dataset.v + ".jpg";
+    runsoon.style.backgroundImage = "url(runs/" + btn.dataset.v + ".jpg)";
+    runpill.lastChild.textContent = "mx · " + btn.dataset.pill;
+    if (play) runvid.play().catch(() => {});
+  };
+  runBtns.forEach((b) => b.addEventListener("click", () => pick(b, true)));
+  pick(runBtns[0], false);
+
+  // The wordmark gets mx's border and pill, the way a window does when mx starts on it
+  setTimeout(() => document.getElementById("word").classList.add("on"), 400);
+</script>
+</body>
+</html>
