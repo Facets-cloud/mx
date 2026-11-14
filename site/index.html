@@ -268,8 +268,8 @@
     </div>
 
     <div class="framed" id="hero">
-      <div class="win"><video src="demo.mp4" poster="poster.jpg" controls playsinline muted preload="metadata"></video><div class="soon" style="background-image:url(poster.jpg)"></div></div>
-      <span class="pill"><span class="spin"></span>mx · Brightness, mx 0.1 note, tidy PDFs</span>
+      <div class="win"><video src="demo.mp4" poster="poster.jpg" controls playsinline preload="metadata"></video><div class="soon" style="background-image:url(poster.jpg)"></div></div>
+      <span class="pill"><span class="spin"></span>mx · Receipts to an Expenses sheet</span>
     </div>
   </div>
 </header>
@@ -288,11 +288,11 @@
     <p class="sub">Each clip is a single prompt to Claude with mx. The border marks the window mx works in, and the pill under it says what it is doing. Nothing was sent, posted or deleted.</p>
     <div class="runs">
       <div class="framed" id="runbox">
-        <div class="win"><video id="runvid" controls playsinline muted preload="metadata"></video><div class="soon" id="runsoon"></div></div>
+        <div class="win"><video id="runvid" controls playsinline preload="metadata"></video><div class="soon" id="runsoon"></div></div>
         <span class="pill" id="runpill"><span class="spin"></span>mx · Working on it</span>
       </div>
       <ol class="runs-list" id="runlist">
-        <li><button type="button" data-v="brightness" data-pill="Brightness to 100%"><b>Brightness to 100%</b><span>"Set my display brightness to 100% and tell me what it was." Opens Displays in System Settings, reads the slider at about 47% and steps it to the top.</span><i>System Settings · open, screenshot, batch</i></button></li>
+        <li><button type="button" data-v="brightness" data-pill="Brightness to 100%"><b>Brightness to 100%</b><span>"Set my display brightness to 100% and tell me what it was." Opens Displays in System Settings. The slider doesn't report its level, so it estimates about 47% from a screenshot, then steps it to the top.</span><i>System Settings · open, screenshot, batch</i></button></li>
         <li><button type="button" data-v="appearance" data-pill="Light mode, then dark"><b>Light mode, then dark</b><span>"Switch my Mac to light mode, then back to dark." Opens Appearance, clicks Light, then Dark, and checks each with a screenshot.</span><i>System Settings · open, click, screenshot</i></button></li>
         <li><button type="button" data-v="finder" data-pill="PDFs into Receipts"><b>PDFs into a Receipts folder</b><span>"Move the PDFs in ~/mx-demo/Downloads into a new folder called Receipts." Sorts by kind, selects the four PDFs, runs New Folder with Selection and names it Receipts.</span><i>Finder · menu, batch, key</i></button></li>
         <li><button type="button" data-v="textedit" data-pill="Draft a release note"><b>A release note, while you work</b><span>"Draft a short release note for mx 0.1 in TextEdit while I keep working." Background mode: a new document behind your window, the note filled in one step, never saved.</span><i>TextEdit · app, menu, fill</i></button></li>
