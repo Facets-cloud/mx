@@ -80,7 +80,7 @@ forward at once.
   erase, reset, uninstall, move to trash, empty trash, format, force quit,
   ship, deploy, release, publish, leave, place order, schedule and
   checkout, for an unlabeled button next to a message box (often Send), for
-  cmd+delete and cmd+option+delete in Finder, for closing a window with unsaved changes, and for reading the
+  cmd+delete and cmd+option+delete in any app, for closing a window with unsaved changes, and for reading the
   clipboard. Escape is refused while focus is in a field you filled, or in
   a popover or sheet that holds one, because it can throw the edit away.
   When an Escape does remove text you entered, the result says so.
@@ -157,8 +157,8 @@ forward at once.
   the name and folder you asked for, then click button "Save" (fix them
   first if not). Return needs no confirm in these panels. Don't scroll the
   file list looking for a folder: go to it by path.
-- Items that stand for files, such as Finder's icons and list rows: `fill`
-  on the item renames its file, with the full name and extension. An app's
+- Items that stand for files (a file name and a file URL, such as Finder's
+  icons and list rows): `fill` on the item renames its file, with the full name and extension. An app's
   inline rename field can close as soon as the app leaves the front, so use
   `fill` rather than pressing return and typing. For a new folder, run the
   app's New Folder menu command, then fill the new item with the name.
@@ -170,7 +170,8 @@ forward at once.
   refs: drag checks each ref is on top at its point and refuses (or cancels
   before the drop) when another window covers it, so nothing lands in the
   wrong place. Then raise the window or move the cover, snapshot, and retry.
-  In Finder the result names the drop folder and where the file is now.
+  When the drop target is a folder, or a window showing one, the result
+  names the folder and where the file is now.
 - `clipboard set` puts text on the clipboard, for pasting. mx saves the
   user's clipboard before its first write (set, key cmd+c or cmd+x) and puts
   it back at `done`, unless the user copied something since. Pass

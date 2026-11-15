@@ -230,7 +230,7 @@ inside that grant:
   quit, unless the call passes `confirm: true`. The same goes for Return in
   a text box (it can send a message), typed text with a newline, an
   unlabeled button beside a message box (usually Send), cmd+delete in
-  Finder, closing a window with unsaved changes, reading the clipboard and
+  any app, closing a window with unsaved changes, reading the clipboard and
   changes in the sensitive settings panes. The agent is told to ask you
   before it passes `confirm`.
 - **Blocked apps.** mx won't touch Keychain Access, password managers

@@ -128,6 +128,9 @@ final class Tools {
                     }
                     let r = pressEffect(probe("before"), probe("after"), fallback: c["fallback"] as? Bool ?? true)
                     return "\(id): \(yn(r.effect != nil))"
+                case "file_item":  // the app is not an input: any app's file items are treated the same
+                    let url = (c["url"] as? String).flatMap { URL(string: $0) }
+                    return "\(id): \(fileItemURL(url: url, filename: c["filename"] as? String)?.path ?? "none")"
                 default: return "\(id): unknown rule"
                 }
             }.joined(separator: "\n")
@@ -527,7 +530,10 @@ final class Tools {
             let confirm = args["confirm"] as? Bool ?? false
             try settingsGate(ctx, n.el, "fill \(describe(n))", confirm: confirm)
             if n.role == "AXSlider" || n.role == "AXIncrementor" { return try setLevel(n, text) }
-            if let url = finderItemURL(ctx, n) { return try renameFinderItem(ctx, n, url, text) }
+            if let url = fileItemURL(url: copyAttr(n.el, kAXURLAttribute) as? URL,
+                                     filename: copyAttr(n.el, kAXFilenameAttribute) as? String) {
+                return try renameFileItem(ctx, n, url, text)
+            }
             return typing == .keys ? try typeInto(ctx, n, text, confirm: confirm)
                 : try fill(ctx, n, text, ignored: args["_fake_fill_ignored"] as? Bool ?? false)
         case "key":
@@ -750,19 +756,11 @@ final class Tools {
         return "filled \(displayRole(n)) with \(text.count) characters"
     }
 
-    /// The file behind a Finder item (an icon in icon view, a name cell in list view): Finder
-    /// gives them AXFilename and AXURL. The path bar has AXURL too, but no AXFilename.
-    private func finderItemURL(_ ctx: Ctx, _ n: Node) -> URL? {
-        guard isFinder(name: ctx.name, bundle: ctx.app.bundleIdentifier),
-              let name = copyAttr(n.el, kAXFilenameAttribute) as? String, !name.isEmpty,
-              let ref = copyAttr(n.el, kAXURLAttribute) as? URL else { return nil }
-        return (ref as NSURL).filePathURL
-    }
-
-    /// fill on a Finder item renames its file, in the same folder, never over another file.
-    /// Finder's own rename field exists only while Finder is in front and closes when the
-    /// front is handed back, and setting a list view name cell changes only the text on screen.
-    private func renameFinderItem(_ ctx: Ctx, _ n: Node, _ url: URL, _ name: String) throws -> String {
+    /// fill on an item that stands for a file (fileItemURL) renames the file, in the same
+    /// folder, never over another file. An app's own rename field can exist only while the app
+    /// is in front and close when the front is handed back, and setting a name cell's value
+    /// changes only the text on screen.
+    private func renameFileItem(_ ctx: Ctx, _ n: Node, _ url: URL, _ name: String) throws -> String {
         guard !name.isEmpty, !name.contains("/"), !name.contains(":"), name != ".", name != ".." else {
             throw MXError("a file name can't be empty, . or .., or contain / or :")
         }
@@ -773,23 +771,23 @@ final class Tools {
         if FileManager.default.fileExists(atPath: dest.path) && name.lowercased() != old.lowercased() {
             throw MXError("\(quote(name, 60)) already exists in \(folder.path); not renaming over it")
         }
-        try closeFinderNameEditor(ctx, editing: old)
+        try closeNameEditor(ctx, editing: old)
         show("Rename to \u{201C}\(name.prefix(40))\u{201D}", at: liveFrame(n.el))
         do { try FileManager.default.moveItem(at: url, to: dest) } catch {
             throw MXError("could not rename \(quote(old, 60)): \(error.localizedDescription)")
         }
         actions += 1
-        usleep(300_000)  // let Finder see the change, then check nothing put the old name back
+        usleep(300_000)  // let the app see the change, then check nothing put the old name back
         guard FileManager.default.fileExists(atPath: dest.path) else {
-            throw MXError("renamed \(quote(old, 60)) to \(quote(name, 60)), but the name didn't stick: Finder put \(quote(old, 60)) back")
+            throw MXError("renamed \(quote(old, 60)) to \(quote(name, 60)), but the name didn't stick: \(ctx.name) put \(quote(old, 60)) back")
         }
         return "renamed \(quote(old, 60)) to \(quote(name, 60)) in \(folder.path)"
     }
 
-    /// After File > New Folder (or Rename) with Finder in front, Finder's inline name editor
-    /// is an AXTextField child of the application, holding the old name. Left open, it commits
-    /// that name over mx's rename at the next click or drag. Escape, posted to Finder, cancels it.
-    private func closeFinderNameEditor(_ ctx: Ctx, editing old: String) throws {
+    /// After a New Folder or Rename command with the app in front, its inline name editor can
+    /// be an AXTextField child of the application, holding the old name. Left open, it commits
+    /// that name over mx's rename at the next click or drag. Escape, posted to the app, cancels it.
+    private func closeNameEditor(_ ctx: Ctx, editing old: String) throws {
         let app = AXUIElementCreateApplication(ctx.app.processIdentifier)
         func editor() -> AXUIElement? {
             ((copyAttr(app, kAXChildrenAttribute) as? [AXUIElement]) ?? []).first {
@@ -800,7 +798,7 @@ final class Tools {
         post(try parseKey("escape"), to: ctx.app.processIdentifier)
         let deadline = now() + 1
         while editor() != nil {
-            guard now() < deadline else { throw MXError("Finder's name editor for \(quote(old, 60)) is open and didn't close on Escape; not renaming") }
+            guard now() < deadline else { throw MXError("\(ctx.name)'s name editor for \(quote(old, 60)) is open and didn't close on Escape; not renaming") }
             usleep(50_000)
         }
     }
@@ -825,8 +823,8 @@ final class Tools {
             }
             escaped = true
         }
-        if !confirm && isTrashShortcut(k) && isFinder(name: ctx.name, bundle: ctx.app.bundleIdentifier) {
-            throw MXError("refused: \(combo) in Finder moves the selection to the Trash or deletes it; ask the user, then pass confirm=true", rule: "finder trash")
+        if !confirm && isTrashShortcut(k) {
+            throw MXError("refused: \(combo) moves the selection to the Trash or deletes it; ask the user, then pass confirm=true", rule: "trash shortcut")
         }
         if !isNavigationKey(k) { try settingsGate(ctx, n?.el ?? focused, "press \(combo)", confirm: confirm, sidebarOK: false) }
         // cmd and ctrl shortcuts are menu key equivalents, which a background app drops.
@@ -910,10 +908,10 @@ final class Tools {
 
     /// Empties a text element the way a person would: select all, then Delete. Reads the
     /// length back and tries again (up to 3 times), because a pending autocorrection (say,
-    /// TextEdit capitalizing the first word) commits on the next key and drops the selection.
+    /// an editor capitalizing the first word) commits on the next key and drops the selection.
     /// Selects through AXSelectedTextRange, since a background app drops a cmd+a key event;
     /// falls back to cmd+a with the front borrowed. A value of only whitespace and newlines
-    /// counts as cleared: Slack's empty message box reads "\n". `hid`: see post.
+    /// counts as cleared: an empty rich-text box can read "\n". `hid`: see post.
     private func clearByKeys(_ ctx: Ctx, _ n: Node, hid: Bool = false) throws {
         let pid = ctx.app.processIdentifier
         func length() -> Int {

@@ -60,7 +60,7 @@ final class Borrow {
         return "(\(wait)borrowed front from \(prev?.localizedName ?? "no app") for \(ms) ms)"
     }
 
-    /// The toast in the pill, which adds the "mx · " prefix: "needed Slack for 1 click".
+    /// The toast in the pill, which adds the "mx · " prefix: "needed <app> for 1 click".
     var toast: String {
         func n(_ k: Int, _ word: String) -> String? { k == 0 ? nil : "\(k) \(word)\(k == 1 ? "" : "s")" }
         let what = [n(clicks, "click"), n(shortcuts, "shortcut")].compactMap { $0 }.joined(separator: " and ")

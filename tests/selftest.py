@@ -1079,7 +1079,7 @@ COMPOSER_GEOMETRY = {7: {"frame": [600, 700, 28, 28], "text_boxes": [[100, 690, 
 
 def gate_table_checks(c):
     """fix10 rule gaps through the hidden _debug_gate hook (no GUI): the new keywords, the
-    Finder trash shortcuts, the composer-button geometry, and the gate-labels.jsonl score."""
+    trash shortcuts (in any app), the composer-button geometry, and the gate-labels.jsonl score."""
     words = ["Ship it", "Deploy", "Release 4.2", "Publish", "Leave channel", "Place order", "Schedule message", "Checkout"]
     text, _ = c.call("_debug_dangerous", labels=words + ["Shipping address help", "Leaves", "Scheduled"])
     got = dict(line.rsplit(": ", 1) for line in text.splitlines())
@@ -1090,7 +1090,8 @@ def gate_table_checks(c):
 
     finder = {"app": "Finder", "window": "Documents", "action": "key", "role": "row", "label": "report.pdf"}
     cases = [dict(finder, id=1, key="cmd+delete"), dict(finder, id=2, key="cmd+option+delete"),
-             dict(finder, id=3, key="delete"), dict(finder, id=4, key="cmd+delete", app="TextEdit"),
+             dict(finder, id=3, key="delete"), dict(finder, id=4, key="cmd+delete", app="Files Pro"),
+             dict(finder, id=9, key="cmd+shift+delete", app="Files Pro"),
              {"id": 5, "app": "Discord", "window": "#team", "action": "click", "role": "button", "label": "",
               "frame": [600, 700, 28, 28], "text_boxes": [[100, 690, 480, 48]]},
              {"id": 6, "app": "Discord", "window": "#team", "action": "click", "role": "button", "label": "",
@@ -1101,10 +1102,12 @@ def gate_table_checks(c):
               "frame": [600, 700, 28, 28], "text_boxes": [[100, 690, 480, 48]]}]
     text, _ = c.call("_debug_gate", cases=cases)
     got = dict(line.split(": ", 1) for line in text.splitlines())
-    check("cmd+delete and cmd+option+delete on a Finder target need confirm",
+    check("cmd+delete and cmd+option+delete need confirm",
           got["1"].startswith("confirm") and got["2"].startswith("confirm"), text)
-    check("plain delete in Finder and cmd+delete outside Finder are allowed",
-          got["3"] == "allow" and got["4"] == "allow", text)
+    check("cmd+delete and cmd+shift+delete need confirm in any app, with no app named",
+          all(got[i] == "confirm: %s trashes or deletes the selection" % k
+              for i, k in (("1", "cmd+delete"), ("4", "cmd+delete"), ("9", "cmd+shift+delete"))), text)
+    check("plain delete is allowed", got["3"] == "allow", text)
     check("an unlabeled button within 80 px of a text box, or in its group, needs confirm",
           got["5"].startswith("confirm") and got["7"].startswith("confirm"), text)
     check("an unlabeled button far from any text box, and a labeled one beside it, are allowed",
@@ -2251,7 +2254,7 @@ def finder_rename_group():
         snap, _ = c.call("snapshot", interactive=False, **w)
         folder = re.search(r'(e\d+) image "untitled folder"', snap)
         text, is_err = c.call("fill", ref=folder.group(1), text="Receipts", **w) if folder else ("no folder", True)
-        check("finder: fill renames the new folder", not is_err and "renamed" in text, text)
+        check("file item: fill renames the new folder", not is_err and "renamed" in text, text)
         snap, _ = c.call("snapshot", interactive=False, **w)
         pdf, dest = re.search(r'(e\d+) image "a.pdf"', snap), re.search(r'(e\d+) image "(?:Receipts|untitled folder)"', snap)
         if pdf and dest:
@@ -2259,7 +2262,7 @@ def finder_rename_group():
             time.sleep(1)
         got = sorted(x for x in os.listdir(d) if not x.startswith("."))
         inside = os.listdir(os.path.join(d, "Receipts")) if os.path.isdir(os.path.join(d, "Receipts")) else None
-        check("finder: the name sticks after the next drag (no \"untitled folder\")",
+        check("file item: the name sticks after the next drag (no \"untitled folder\")",
               got == ["Receipts"] and inside == ["a.pdf"], (got, inside))
         c.call("done", summary="finder rename check")
     finally:
@@ -2410,6 +2413,24 @@ def press_effect_checks(c):
     check("press effect: a removed element counts beside glyph churn", got.get("11") == "yes", text)
 
 
+def file_item_checks(c):
+    """fix24: which elements stand for a file (fill renames it, a drop names its folder),
+    through the hidden _debug_fix22 hook (no GUI). The decision takes no app: a file item in
+    any app is treated like one in Finder."""
+    item = {"rule": "file_item", "url": "file:///tmp/mx-x/a%20b.pdf", "filename": "a b.pdf"}
+    cases = [dict(item, id=1, app="Finder"), dict(item, id=2, app="Files Pro"),
+             # A path bar entry (URL, no file name), a web link, and an inline name editor (neither).
+             {"id": 3, "rule": "file_item", "app": "Files Pro", "url": "file:///tmp/mx-x/"},
+             {"id": 4, "rule": "file_item", "app": "Files Pro", "url": "https://example.com/a.pdf", "filename": "a.pdf"},
+             {"id": 5, "rule": "file_item", "app": "Files Pro", "filename": ""}]
+    text, _ = c.call("_debug_fix22", cases=cases)
+    got = dict(line.split(": ", 1) for line in text.splitlines())
+    check("file item: a file-URL item with a file name is a file in Finder and in any other app",
+          got.get("1") == got.get("2") == "/tmp/mx-x/a b.pdf", text)
+    check("file item: a path bar entry, a web link and a name editor are not file items",
+          [got.get(i) for i in ("3", "4", "5")] == ["none"] * 3, text)
+
+
 def fix22_group():
     """fix22, on screen in TextEdit (scratch document only): the Escape gate refuses Escape
     in a field mx filled, passes with confirm, and reports entered text that Escape removed
@@ -2498,7 +2519,8 @@ ONLY = {"protocol": protocol_checks, "settle": settle_checks, "diff": with_clien
         "fix12-idle": lambda: fix12_group(front_eof=False), "fix13": fix13_group,
         "audit": audit_checks, "finder": finder_rename_group, "drag": drag_target_group,
         "placement": with_client(pill_place_checks), "donepill": done_pill_group,
-        "fix22rules": with_client(fix22_rule_checks), "fix23rules": with_client(press_effect_checks), "fix22": fix22_group, "press": press_checks}
+        "fix22rules": with_client(fix22_rule_checks), "fix23rules": with_client(press_effect_checks),
+        "fileitem": with_client(file_item_checks), "fix22": fix22_group, "press": press_checks}
 
 
 if __name__ == "__main__":

@@ -23,7 +23,7 @@ private func obj(_ props: [String: Any], _ required: [String] = []) -> [String: 
     return s
 }
 
-private let appArg = str("App name from list_apps (such as TextEdit, or Dock and ControlCenter from list_apps all=true), bundle id, or pid. " +
+private let appArg = str("App name as list_apps shows it (Dock and ControlCenter come from list_apps all=true), bundle id, or pid. " +
     "\"system\" is the system UI: macOS's menu bar extras plus open Control Center and Notification Center panels. " +
     "A role and name there that isn't on screen opens the Control Center panel first.")
 private let scopeArg: [String: Any] = ["type": "string", "enum": ["window", "menubar", "extras", "windows", "system", "app"],
@@ -85,7 +85,7 @@ let toolList: [[String: Any]] = [
         "A text field is read back; if the text didn't take, it is typed key by key once (shift+return for line breaks) and the result says so. " +
         "With typing=keys (see start) the text is typed key by key, and text with a newline is refused unless confirm is true, " +
         "since a typed newline is a Return that can send. " +
-        "On a Finder item (its image in icon view, its name textbox in list view) fill renames the file, in the background; give the full name with any extension.",
+        "On an item that stands for a file (it has a file name and a file URL, such as an icon or a name cell in a file list) fill renames the file, in the background; give the full name with any extension.",
      "inputSchema": obj(target(["text": str("The text."),
                                 "confirm": bool("With typing=keys: required for text containing a newline. Ask the user before passing true.")]), ["app", "text"])],
     ["name": "key", "description": "Press a key or combination in the app's window, such as cmd+k, shift+tab, return, escape, down or a single letter. " +
@@ -138,7 +138,7 @@ let toolList: [[String: Any]] = [
     ["name": "drag", "description": "Drag with the mouse from one point to another; each end is a ref or {\"x\": .., \"y\": ..} in screen points. " +
         "Borrows the front in background mode. Use it to move windows by the title bar, select text, or drag items. " +
         "A ref end must be on top at its point: if another window covers it, drag refuses, and if the drop ref is no longer under the " +
-        "point at release, it cancels the drag; nothing is dropped. The result says what was under each end (in Finder, the drop folder).",
+        "point at release, it cancels the drag; nothing is dropped. The result says what was under each end, and for a drop on a folder or a window showing one, the folder and where the file is now.",
      "inputSchema": obj(["app": appArg, "window": windowArg, "scope": scopeArg,
                          "from": ["description": "A ref or {\"x\": .., \"y\": ..}."], "to": ["description": "A ref or {\"x\": .., \"y\": ..}."]],
                         ["app", "from", "to"])],

@@ -1,18 +1,28 @@
-// Gate rules added in fix10 (Finder trash shortcuts, unlabeled composer buttons) and the
+// Gate rules added in fix10 (trash shortcuts, unlabeled composer buttons) and the
 // hidden _debug_gate hook, which runs the whole confirm/refuse rule table on plain values
 // so it can be scored without a GUI. The live gates call the same pure functions.
 import AppKit
 import ApplicationServices
 
 /// cmd+delete (Move to Trash), cmd+option+delete (Delete Immediately) and the shift
-/// variants (Empty Trash), the Finder shortcuts that delete files.
+/// variants (Empty Trash): in file browsers and many other apps they trash or delete the selection.
 func isTrashShortcut(_ k: KeyCombo) -> Bool {
     k.code == 51 && k.flags.contains(.maskCommand) && k.flags.subtracting([.maskCommand, .maskAlternate, .maskShift]).isEmpty
 }
 
-/// True for Finder, by bundle id or name.
-func isFinder(name: String, bundle: String?) -> Bool {
-    bundle == "com.apple.finder" || name.lowercased() == "finder"
+/// The file an element stands for, such as an icon or a name cell in a file list: it names
+/// the file (AXFilename) and points at it (AXURL, a file URL). A path bar or a link has a URL
+/// but no file name, and an inline name editor has neither, so neither counts. Nil otherwise.
+func fileItemURL(url: URL?, filename: String?) -> URL? {
+    guard let filename, !filename.isEmpty, let url, url.isFileURL else { return nil }
+    return (url as NSURL).filePathURL
+}
+
+/// The path of a file URL that is a folder on disk, else nil.
+func folderPath(_ url: URL?) -> String? {
+    guard let url = url.flatMap({ ($0 as NSURL).filePathURL }) else { return nil }
+    var dir: ObjCBool = false
+    return FileManager.default.fileExists(atPath: url.path, isDirectory: &dir) && dir.boolValue ? url.path : nil
 }
 
 /// How close (points, edge to edge) an unlabeled button must be to a text box to count as its Send button.
@@ -55,7 +65,7 @@ private func rect(_ v: Any?) -> CGRect? {
 }
 
 /// The rule table for one action, in the live gates' order: blocked apps, permission
-/// prompts, click labels and composer buttons, submit keys and Finder trash shortcuts,
+/// prompts, click labels and composer buttons, submit keys and trash shortcuts,
 /// then sensitive System Settings panes. Returns "allow", "confirm: <why>" or "block: <why>".
 func gateDecision(_ a: [String: Any]) -> String {
     let app = a["app"] as? String ?? "", bundle = a["bundle"] as? String
@@ -77,7 +87,7 @@ func gateDecision(_ a: [String: Any]) -> String {
         if isSubmitKey(k), let why = submitReason(role: role, subrole: "", label: label, roleDesc: "", editable: false) {
             return "confirm: \(key) in \(why)"
         }
-        if isFinder(name: app, bundle: bundle) && isTrashShortcut(k) { return "confirm: \(key) in Finder deletes files" }
+        if isTrashShortcut(k) { return "confirm: \(key) trashes or deletes the selection" }
     }
     let settings = bundle == settingsBundle || app.lowercased() == "system settings"
     if settings, ["click", "fill", "key"].contains(action), let pane = sensitivePaneName([window]) {
@@ -176,8 +186,8 @@ func isGlyphNoise(_ text: String) -> Bool {
 /// In the tree, ignored are elements removed and re-added with the same text (recreated)
 /// and glyph or digit-only elements (isGlyphNoise). For a fallback element (a row, cell
 /// or web control, whose AXPress is unreliable) only what the diff shows counts: a text
-/// that changed only in digits is noise, and so is the target's own state (Slack's sidebar
-/// row turns AXSelected on under AXPress without opening anything). For other controls
+/// that changed only in digits is noise, and so is the target's own state (an Electron
+/// sidebar row can turn AXSelected on under AXPress without opening anything). For other controls
 /// that state is an effect.
 func pressEffect<K>(_ a: PressProbe<K>, _ b: PressProbe<K>, fallback: Bool) -> (effect: String?, noise: String?) {
     if a.title != b.title { return ("title: \(b.title)", nil) }

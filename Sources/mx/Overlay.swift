@@ -149,7 +149,7 @@ final class Overlay {
         }
     }
 
-    /// A short note in the pill for 2.5 s, such as "mx · needed Slack for 1 click".
+    /// A short note in the pill for 2.5 s, such as "mx · needed <app> for 1 click".
     func toast(_ text: String) {
         DispatchQueue.main.async {
             if self.closed { return }

@@ -895,7 +895,7 @@ extension Tools {
             if let saved, mode != .watch, borrow == nil { CGWarpMouseCursorPosition(saved) }
             actions += 1
             var out = "dragged " + (source.map { hitText($0) + " " } ?? "") + "at \(Int(from.x)),\(Int(from.y)) onto \(under.map(hitText) ?? "nothing mx can read") at \(Int(to.x)),\(Int(to.y))"
-            if isFinder(name: ctx.name, bundle: ctx.app.bundleIdentifier), let dir = under.flatMap(finderFolder) {
+            if let dir = under.flatMap(dropFolder) {
                 out += "; the drop folder is \(dir)"
                 // Where the item went, when the source is a file mx can see.
                 if let src = fromRef.flatMap({ copyAttr($0.el, kAXURLAttribute) as? URL }).flatMap({ ($0 as NSURL).filePathURL }) {
@@ -970,15 +970,16 @@ private func hitText(_ el: AXUIElement) -> String {
     return s
 }
 
-/// For a Finder drop: the folder that receives it, a folder item's own path or the
-/// window's folder for a drop on its background. Nil for a file or anything else.
-private func finderFolder(_ el: AXUIElement) -> String? {
-    if let url = (copyAttr(el, kAXURLAttribute) as? URL).flatMap({ ($0 as NSURL).filePathURL }), copyAttr(el, kAXFilenameAttribute) != nil {
-        return url.hasDirectoryPath ? url.path : nil
+/// For a drop: the folder that receives it, a folder item's own path (fileItemURL) or, for a
+/// drop on a window's background, the folder the window shows (its AXDocument or AXURL).
+/// Nil for a file item, a window showing a file or no folder, or anything else.
+private func dropFolder(_ el: AXUIElement) -> String? {
+    if let url = fileItemURL(url: copyAttr(el, kAXURLAttribute) as? URL, filename: copyAttr(el, kAXFilenameAttribute) as? String) {
+        return folderPath(url)
     }
-    guard let w = axEl(el, kAXWindowAttribute), let doc = copyAttr(w, kAXDocumentAttribute) as? String,
-          let url = URL(string: doc), url.isFileURL else { return nil }
-    return url.path
+    guard let w = axEl(el, kAXWindowAttribute) else { return nil }
+    let doc = (copyAttr(w, kAXDocumentAttribute) as? String).flatMap { URL(string: $0) }
+    return folderPath(doc ?? copyAttr(w, kAXURLAttribute) as? URL)
 }
 
 /// A scroll position as a percent: the scroll bar's value, else the content's offset.
