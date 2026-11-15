@@ -45,6 +45,7 @@ enum PillIcon { case spinner, check, none }
 private struct ListedWindow {
     let id: CGWindowID
     let pid: pid_t
+    let owner: String
     let layer: Int
     let frame: CGRect
 }
@@ -57,7 +58,7 @@ private func onScreenWindows() -> [ListedWindow] {
         guard let id = d[kCGWindowNumber as String] as? CGWindowID, let pid = d[kCGWindowOwnerPID as String] as? pid_t,
               let b = d[kCGWindowBounds as String] as? NSDictionary, let r = CGRect(dictionaryRepresentation: b),
               (d[kCGWindowAlpha as String] as? Double ?? 1) > 0.01 else { return nil }
-        return ListedWindow(id: id, pid: pid, layer: d[kCGWindowLayer as String] as? Int ?? 0,
+        return ListedWindow(id: id, pid: pid, owner: d[kCGWindowOwnerName as String] as? String ?? "?", layer: d[kCGWindowLayer as String] as? Int ?? 0,
                             frame: CGRect(x: r.minX, y: h - r.maxY, width: r.width, height: r.height))
     }
 }
@@ -109,6 +110,7 @@ final class Indicator {
     private var observer: AXObserver?
     private var observedPid: pid_t?
     private var borderBelow = false  // the border sits right below the target (a sheet sticks out)
+    private var hiddenWhy: String?  // why the border is hidden, logged once per change
 
     /// Starts tracking a window (nil: the session has no window, such as the system UI).
     /// With `pid`, follows that app's focused window from then on.
@@ -138,7 +140,7 @@ final class Indicator {
     /// Hides everything and stops tracking.
     func stop() {
         timer?.invalidate(); timer = nil
-        target = nil; wave = nil
+        target = nil; wave = nil; hiddenWhy = nil
         follow(nil)
         border?.orderOut(nil); waveWin?.orderOut(nil)
         opaque()
@@ -173,12 +175,20 @@ final class Indicator {
         let list = onScreenWindows()
         let me = getpid()
         var frame: CGRect?, covered = true, below = false, inPlace = false, inFront: [CGRect] = []
+        var why: String? = target == nil ? nil : "the target window is not on screen (minimized, closed or on another Space)"
         if let target, let i = list.firstIndex(where: { $0.id == target }) {
             let t = list[i]
             frame = t.frame
-            let above = list[..<i].filter { $0.pid != me && (0..<20).contains($0.layer) }.map(\.frame)
+            let aboveWins = list[..<i].filter { $0.pid != me && (0..<20).contains($0.layer) }
+            let above = aboveWins.map(\.frame)
             covered = isCovered(t.frame, by: above)
             inFront = above
+            why = nil
+            if covered {
+                var owners: [String] = []
+                for w in aboveWins where w.frame.intersects(t.frame) && !owners.contains(w.owner) { owners.append(w.owner) }
+                why = "the \(t.owner) window is covered by \(owners.joined(separator: ", "))"
+            }
             // The app's windows right above the target: its sheets and child windows among them.
             let run = list[..<i].reversed().prefix { $0.pid == t.pid || $0.pid == me }.filter { $0.pid == t.pid }
             below = run.contains { !t.frame.contains($0.frame) }
@@ -191,6 +201,11 @@ final class Indicator {
             }
         }
         borderBelow = below
+        if why != hiddenWhy {
+            hiddenWhy = why
+            // A screen recording that leaves out other apps' windows shows the target uncovered, so say why.
+            if let why { FileHandle.standardError.write(Data("mx: border hidden, pill at the screen bottom: \(why)\n".utf8)) }
+        }
         if let frame, !covered {
             showBorder(frame, reorder: !inPlace, below: below)
         } else {

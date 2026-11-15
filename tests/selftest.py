@@ -1587,6 +1587,11 @@ def indicator_group():
         check("covered window: the border hides", "border" not in kinds, mine)
         check("covered window: the waveform shows as a pill at the bottom center of the screen",
               wave is not None and abs(wave[0] + wave[2] / 2 - sw / 2) <= 2 and wave[1] > sh - 200, (wave, sw, sh))
+        # fix20: the fallback says why on stderr, naming the covering app, so a recording that
+        # leaves Finder out (the target looks uncovered there) can be explained.
+        hidden = [l for l in c.stderr if "border hidden" in l]
+        check("covered window: stderr says the border is hidden and names Finder",
+              any("TextEdit window is covered by" in l and "Finder" in l for l in hidden), hidden)
 
         # Visible again: the border directly above the window, the waveform below it.
         move_finder_window(fw, [sw - 520, 120, sw - 40, 480])
@@ -1606,6 +1611,8 @@ def indicator_group():
               wave and abs(wave[0] + wave[2] / 2 - (frame[0] + frame[2] / 2)) <= 1 and 0 <= wave[1] - (frame[1] + frame[3]) <= 10,
               (wave, frame))
         check("at most one tag-text overlay (border carries no text)", sum(k != "border" for _, k, _ in mine) <= 1, mine)
+        check("the hidden-border line is logged once, not every tick",
+              sum("border hidden" in l for l in c.stderr) == len(hidden), [l for l in c.stderr if "border hidden" in l])
 
         content, is_err = c.call_content("screenshot", full=True, marks=False, _with_overlay=True, **w)
         img = next((x for x in content if x.get("type") == "image"), None)
