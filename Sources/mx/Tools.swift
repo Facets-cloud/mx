@@ -121,6 +121,13 @@ final class Tools {
                 case "same_text": return "\(id): \(yn(sameText(c["want"] as? String ?? "", c["got"] as? String ?? "")))"
                 case "counts_only": return "\(id): \(yn(onlyCountsChanged(c["a"] as? [String] ?? [], c["b"] as? [String] ?? [])))"
                 case "lost": return "\(id): \(lostEntries(c["texts"] as? [String] ?? [], lines(c["before"]), lines(c["after"])))"
+                case "press_effect":
+                    func probe(_ side: String) -> PressProbe<String> {
+                        PressProbe(lines: lines(c[side]).map { ($0.ref, $0.text) }, title: c["\(side)_title"] as? String ?? "",
+                                   target: c["\(side)_target"] as? [String] ?? [])
+                    }
+                    let r = pressEffect(probe("before"), probe("after"), fallback: c["fallback"] as? Bool ?? true)
+                    return "\(id): \(yn(r.effect != nil))"
                 default: return "\(id): unknown rule"
                 }
             }.joined(separator: "\n")
@@ -584,7 +591,7 @@ final class Tools {
             // happens once, in the settle that follows the action (acting).
             settle(ctx, since: before.sig, titleWait: false)
             actions += 1
-            if pressChanged(before, pressProbe(ctx, n), ignoringCounts: fallback) { return what + " (\(action == "press" ? "pressed" : axAction))" }
+            if pressChanged(axAction, before, pressProbe(ctx, n), fallback: fallback) { return what + " (\(action == "press" ? "pressed" : axAction))" }
             let noEffect = "\(displayRole(n)) \(quote(label, 60)): no visible effect"
             guard fallback else { return noEffect + " (tried \(action == "press" ? "AXPress" : axAction))" }
             var tried = ["AXPress"]
@@ -595,7 +602,7 @@ final class Tools {
                 before = pressProbe(ctx, n)
                 post(try parseKey("return"), to: ctx.app.processIdentifier)
                 settle(ctx, since: before.sig, titleWait: false)
-                if pressChanged(before, pressProbe(ctx, n), ignoringCounts: true) {
+                if pressChanged("return", before, pressProbe(ctx, n), fallback: true) {
                     return what + " (AXPress changed nothing; focused it and pressed return)"
                 }
                 tried.append("return")
@@ -605,7 +612,7 @@ final class Tools {
             let p = try mouseClick(ctx, n, label)
             settle(ctx, since: before.sig, titleWait: false)
             let at = "clicked at \(Int(p.x)),\(Int(p.y))"
-            if pressChanged(before, pressProbe(ctx, n), ignoringCounts: true) {
+            if pressChanged("mouse", before, pressProbe(ctx, n), fallback: true) {
                 return what + " (\(tried.joined(separator: " and ")) changed nothing; \(at))"
             }
             return noEffect + " (tried \(tried.joined(separator: ", ")), mouse: \(at))"
@@ -619,16 +626,26 @@ final class Tools {
 
     /// What a press can change: the window's tree and title, and the target's own state
     /// (gone, selected, value, focused, expanded), which the snapshot lines don't all show.
-    private func pressProbe(_ ctx: Ctx, _ n: Node) -> (sig: (tree: [String], title: String), target: [String]) {
+    /// `sig` feeds the settle.
+    private func pressProbe(_ ctx: Ctx, _ n: Node) -> (sig: (tree: [String], title: String), probe: PressProbe<ElKey>) {
         let target = [kAXRoleAttribute, kAXSelectedAttribute, kAXValueAttribute, kAXFocusedAttribute, kAXExpandedAttribute]
             .map { copyAttr(n.el, $0).map { "\($0)" } ?? "-" }
-        return (sig(ctx), target)
+        guard let w = try? ctx.roots() else { return (([], ""), PressProbe(lines: [], title: "", target: target)) }
+        let nodes = walkAll(w, single: ctx.scope == .window), title = ctx.title(w)
+        let shown = nodes.filter { isShown($0, interactive: ctx.st.interactive) }
+        return ((signature(nodes, interactive: ctx.st.interactive), title),
+                PressProbe(lines: shown.map { (ElKey(el: $0.el), describe($0)) }, title: title, target: target))
     }
 
-    private func pressChanged(_ a: (sig: (tree: [String], title: String), target: [String]),
-                              _ b: (sig: (tree: [String], title: String), target: [String]), ignoringCounts: Bool) -> Bool {
-        if a.target != b.target || a.sig.title != b.sig.title { return true }
-        return a.sig.tree != b.sig.tree && !(ignoringCounts && onlyCountsChanged(a.sig.tree, b.sig.tree))
+    /// True when the press visibly did something (see pressEffect). Logs one stderr line per
+    /// check: the difference that counted, or none, and the first one it ignored as noise.
+    private func pressChanged(_ path: String, _ a: (sig: (tree: [String], title: String), probe: PressProbe<ElKey>),
+                              _ b: (sig: (tree: [String], title: String), probe: PressProbe<ElKey>), fallback: Bool) -> Bool {
+        let r = pressEffect(a.probe, b.probe, fallback: fallback)
+        let line = "mx: press check after \(path): " + (r.effect.map { "effect, \(quote($0, 120))" } ?? "no effect")
+            + (r.noise.map { "; ignored \(quote($0, 120))" } ?? "") + "\n"
+        FileHandle.standardError.write(line.data(using: .utf8)!)
+        return r.effect != nil
     }
 
     /// Scrolls the element into view, brings its window to the front (regular apps only:

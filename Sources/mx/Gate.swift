@@ -152,6 +152,65 @@ func onlyCountsChanged(_ a: [String], _ b: [String]) -> Bool {
     return a.count == b.count && zip(a, b).allSatisfy { strip($0) == strip($1) }
 }
 
+/// What the press check compares before and after a press: the window's shown lines keyed
+/// by element identity (as the acting diff keys them by ref), its title, and the target's
+/// own state (role, so gone, selected, value, focused, expanded), which the lines don't show.
+struct PressProbe<K: Hashable> {
+    var lines: [(key: K, text: String)]
+    var title: String
+    var target: [String]
+}
+
+/// True when a line's quoted text is only private-use glyphs (icon fonts), digits,
+/// punctuation and spaces: an icon or a count, not content a press would change.
+func isGlyphNoise(_ text: String) -> Bool {
+    let quoted = text.matches(of: #/"((?:[^"\\]|\\.)*)"/#).map { String($0.1) }
+    guard !quoted.isEmpty else { return false }
+    let pua: (Unicode.Scalar) -> Bool = { (0xE000...0xF8FF).contains($0.value) || $0.value >= 0xF0000 }
+    let skip = CharacterSet.decimalDigits.union(.whitespaces).union(.punctuationCharacters)
+    return quoted.allSatisfy { $0.unicodeScalars.allSatisfy { pua($0) || skip.contains($0) } }
+}
+
+/// Why a press counts as having an effect (the first difference, diff-style), or nil when
+/// it had none; `noise` is the first difference it ignored. A title change is an effect.
+/// In the tree, ignored are elements removed and re-added with the same text (recreated)
+/// and glyph or digit-only elements (isGlyphNoise). For a fallback element (a row, cell
+/// or web control, whose AXPress is unreliable) only what the diff shows counts: a text
+/// that changed only in digits is noise, and so is the target's own state (Slack's sidebar
+/// row turns AXSelected on under AXPress without opening anything). For other controls
+/// that state is an effect.
+func pressEffect<K>(_ a: PressProbe<K>, _ b: PressProbe<K>, fallback: Bool) -> (effect: String?, noise: String?) {
+    if a.title != b.title { return ("title: \(b.title)", nil) }
+    var noise: String?
+    if a.target != b.target {
+        let state = "target state \(a.target) -> \(b.target)"
+        if !fallback { return (state, nil) }
+        noise = state
+    }
+    let old = Dictionary(a.lines.map { ($0.key, $0.text) }, uniquingKeysWith: { x, _ in x })
+    let newKeys = Set(b.lines.map(\.key))
+    var changed: [String] = []
+    for l in b.lines {
+        guard let o = old[l.key], o != l.text else { continue }
+        if (fallback && onlyCountsChanged([o], [l.text])) || (isGlyphNoise(o) && isGlyphNoise(l.text)) {
+            noise = noise ?? "~ \(l.text)"
+        } else { changed.append("~ \(l.text)") }
+    }
+    if let first = changed.first { return (first, noise) }
+    // Added and removed lines with the same text cancel out: the element was recreated.
+    var removed = a.lines.filter { !newKeys.contains($0.key) }.map(\.text)
+    var added: [String] = []
+    for t in b.lines.filter({ old[$0.key] == nil }).map(\.text) {
+        if let i = removed.firstIndex(of: t) { removed.remove(at: i); noise = noise ?? "recreated \(t)" } else { added.append(t) }
+    }
+    for (sign, texts) in [("+", added), ("-", removed)] {
+        for t in texts {
+            if isGlyphNoise(t) { noise = noise ?? "\(sign) \(t)" } else { return ("\(sign) \(t)", noise) }
+        }
+    }
+    return (nil, noise)
+}
+
 /// True inside a web area (web views, Electron apps), where controls often ignore AXPress.
 func inWebContent(_ el: AXUIElement) -> Bool {
     ancestors(el).dropFirst().contains { copyAttr($0, kAXRoleAttribute) as? String == "AXWebArea" }

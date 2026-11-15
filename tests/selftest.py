@@ -2365,6 +2365,51 @@ def fix22_rule_checks(c):
     check("escape: entered text still showing is not reported", got.get("11") == "[]", text)
 
 
+def press_effect_checks(c):
+    """fix23's press effect rule through the hidden _debug_fix22 hook (no GUI): icon-glyph
+    churn, recreated elements and an empty diff are no effect; a selection, title or
+    content change is."""
+    row = 'e1 row "Sam (you)"'
+    glyph = 'text "\ue506"'
+    cases = [
+        # Glyph-only churn: icon texts recreated, or swapped for other icon glyphs.
+        {"id": 1, "rule": "press_effect", "before": [row, "e2 " + glyph], "after": [row, "e9 " + glyph]},
+        {"id": 2, "rule": "press_effect", "before": [row, "e2 " + glyph], "after": [row, 'e2 text "\ue507"', 'e8 text "\U000f0001 3"']},
+        # Recreated with the same text, not changed.
+        {"id": 3, "rule": "press_effect", "before": [row, 'e2 heading "General"'], "after": ['e7 row "Sam (you)"', 'e2 heading "General"']},
+        # Nothing the diff would show: no effect.
+        {"id": 4, "rule": "press_effect", "before": [row], "after": [row],
+         "before_target": ["0", "-", "-"], "after_target": ["0", "-", "-"]},
+        # A row whose AXSelected turns on with nothing else changing (Slack's sidebar under
+        # AXPress) had no effect; the same selection change on a native control is one.
+        {"id": 12, "rule": "press_effect", "before": [row], "after": [row],
+         "before_target": ["0", "", "0"], "after_target": ["1", "", "0"]},
+        # Real effects: selection (native), title, new content, changed words.
+        {"id": 5, "rule": "press_effect", "fallback": False, "before": [row], "after": [row],
+         "before_target": ["0", "-", "-"], "after_target": ["1", "-", "-"]},
+        {"id": 6, "rule": "press_effect", "before": [row], "after": [row], "before_title": "General", "after_title": "Sam (you)"},
+        {"id": 7, "rule": "press_effect", "before": [row], "after": [row, 'e5 heading "Sam (you)"']},
+        {"id": 8, "rule": "press_effect", "before": [row, 'e2 text "General"'], "after": [row, 'e2 text "Random"']},
+        # Digits ticking over are noise for rows, but an effect for a native stepper.
+        {"id": 9, "rule": "press_effect", "before": [row, 'e2 text "2m"'], "after": [row, 'e2 text "3m"']},
+        {"id": 10, "rule": "press_effect", "fallback": False,
+         "before": ['e3 stepper "Copies" = "1"'], "after": ['e3 stepper "Copies" = "2"']},
+        # An element removed for good is an effect even when a glyph churns beside it.
+        {"id": 11, "rule": "press_effect", "before": [row, "e2 " + glyph, 'e4 button "Close"'], "after": [row, "e9 " + glyph]},
+    ]
+    text, _ = c.call("_debug_fix22", cases=cases)
+    got = dict(line.split(": ", 1) for line in text.splitlines())
+    check("press effect: icon-glyph churn is not an effect", got.get("1") == "no" and got.get("2") == "no", text)
+    check("press effect: an element recreated with the same text is not an effect", got.get("3") == "no", text)
+    check("press effect: an empty diff with the same title and target state is not an effect", got.get("4") == "no", text)
+    check("press effect: a row's own selection turning on with an empty diff is not an effect", got.get("12") == "no", text)
+    check("press effect: a native selection, title, new content and changed words are effects",
+          [got.get(str(i)) for i in (5, 6, 7, 8)] == ["yes"] * 4, text)
+    check("press effect: digits ticking are noise for rows, an effect for native controls",
+          got.get("9") == "no" and got.get("10") == "yes", text)
+    check("press effect: a removed element counts beside glyph churn", got.get("11") == "yes", text)
+
+
 def fix22_group():
     """fix22, on screen in TextEdit (scratch document only): the Escape gate refuses Escape
     in a field mx filled, passes with confirm, and reports entered text that Escape removed
@@ -2453,7 +2498,7 @@ ONLY = {"protocol": protocol_checks, "settle": settle_checks, "diff": with_clien
         "fix12-idle": lambda: fix12_group(front_eof=False), "fix13": fix13_group,
         "audit": audit_checks, "finder": finder_rename_group, "drag": drag_target_group,
         "placement": with_client(pill_place_checks), "donepill": done_pill_group,
-        "fix22rules": with_client(fix22_rule_checks), "fix22": fix22_group, "press": press_checks}
+        "fix22rules": with_client(fix22_rule_checks), "fix23rules": with_client(press_effect_checks), "fix22": fix22_group, "press": press_checks}
 
 
 if __name__ == "__main__":
