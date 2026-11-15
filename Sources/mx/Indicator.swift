@@ -1,5 +1,8 @@
 // The session indicator: a rounded border around the target app's window, and in
 // background mode a small pill with a spinner and the step tag just below the window.
+// When that spot is off the screen's visible frame (a window at the bottom of the screen,
+// full screen, or against the Dock) or a window in front of the target covers it, the pill
+// goes inside the target instead, centered 8 px above its bottom edge.
 // Both windows sit at the target window's depth (ordered just above it), so the user's
 // own windows cover them. The window server keeps a window's sheets and child windows
 // with it, so when one of those sticks out past the target's edge, the border goes just
@@ -72,6 +75,19 @@ private func isCovered(_ target: CGRect, by above: [CGRect]) -> Bool {
     return true
 }
 
+/// Where the pill goes for target window frame `f`: centered 6 px below it, or inside it
+/// 8 px above its bottom edge when the spot below is off `visible` (the screen's visible
+/// frame) or a window in front of the target (`inFront`) overlaps it. Inside is set when
+/// the pill goes inside. Pure, so the same layout always gives the same answer.
+func pillPlacement(_ f: CGRect, box: CGSize, visible: CGRect, inFront: [CGRect]) -> (origin: CGPoint, inside: Bool) {
+    let x = f.midX - box.width / 2
+    let below = CGRect(x: x, y: f.minY - 6 - box.height, width: box.width, height: box.height)
+    if below.minY >= visible.minY && !inFront.contains(where: { $0.intersects(below) }) {
+        return (below.origin, false)
+    }
+    return (CGPoint(x: x, y: max(f.minY + 8, visible.minY + 4)), true)
+}
+
 final class Indicator {
     private var target: CGWindowID?
     private var wave: String?  // the pill's tag; nil hides the pill
@@ -92,6 +108,7 @@ final class Indicator {
     private let font = NSFont.systemFont(ofSize: 11, weight: .medium)
     private var observer: AXObserver?
     private var observedPid: pid_t?
+    private var borderBelow = false  // the border sits right below the target (a sheet sticks out)
 
     /// Starts tracking a window (nil: the session has no window, such as the system UI).
     /// With `pid`, follows that app's focused window from then on.
@@ -155,12 +172,13 @@ final class Indicator {
         guard timer != nil else { return }
         let list = onScreenWindows()
         let me = getpid()
-        var frame: CGRect?, covered = true, below = false, inPlace = false
+        var frame: CGRect?, covered = true, below = false, inPlace = false, inFront: [CGRect] = []
         if let target, let i = list.firstIndex(where: { $0.id == target }) {
             let t = list[i]
             frame = t.frame
             let above = list[..<i].filter { $0.pid != me && (0..<20).contains($0.layer) }.map(\.frame)
             covered = isCovered(t.frame, by: above)
+            inFront = above
             // The app's windows right above the target: its sheets and child windows among them.
             let run = list[..<i].reversed().prefix { $0.pid == t.pid || $0.pid == me }.filter { $0.pid == t.pid }
             below = run.contains { !t.frame.contains($0.frame) }
@@ -172,13 +190,14 @@ final class Indicator {
                 inPlace = list[(j + 1)..<i].allSatisfy { $0.pid == me || ($0.pid == t.pid && t.frame.contains($0.frame)) }
             }
         }
+        borderBelow = below
         if let frame, !covered {
             showBorder(frame, reorder: !inPlace, below: below)
         } else {
             border?.orderOut(nil)
         }
         guard let text = wave else { waveWin?.orderOut(nil); return }
-        layoutWave(text, under: covered ? nil : frame)
+        layoutWave(text, under: covered ? nil : frame, inFront: inFront)
     }
 
     // MARK: border
@@ -209,17 +228,19 @@ final class Indicator {
 
     // MARK: pill
 
-    /// Under the window's bottom edge, centered, at the window's depth; with no frame
-    /// (covered, minimized, no window), a pill at the bottom center of the main screen.
-    private func layoutWave(_ text: String, under f: CGRect?) {
+    /// Under the window's bottom edge (or inside it, see pillPlacement), centered, at the
+    /// window's depth; with no frame (covered, minimized, no window), a pill at the bottom
+    /// center of the main screen. `inFront`: frames of the windows in front of the target.
+    private func layoutWave(_ text: String, under f: CGRect?, inFront: [CGRect]) {
         let w = waveWin ?? makeWave()
         let size = (text as NSString).size(withAttributes: [.font: font])
         let lead: CGFloat = icon == .none ? 12 : 12 + 12 + 6  // padding, icon, gap
         let box = CGSize(width: lead + ceil(size.width) + 12, height: 24)
         let origin: CGPoint
+        var inside = false
         if let f {
             let screen = NSScreen.screens.first { $0.frame.intersects(f) } ?? NSScreen.main ?? NSScreen.screens[0]
-            origin = CGPoint(x: f.midX - box.width / 2, y: max(f.minY - 6 - box.height, screen.visibleFrame.minY + 4))
+            (origin, inside) = pillPlacement(f, box: box, visible: screen.visibleFrame, inFront: inFront)
         } else {
             let vf = (NSScreen.main ?? NSScreen.screens[0]).visibleFrame  // above the Dock
             origin = CGPoint(x: vf.midX - box.width / 2, y: vf.minY + 12)
@@ -241,20 +262,19 @@ final class Indicator {
         }
         if f != nil, let t = target {
             w.level = .normal
-            // Above the border, which is right above the target window.
-            let below = border.flatMap { $0.isVisible ? $0.windowNumber : nil } ?? Int(t)
-            if !w.isVisible || !isDirectlyAbove(w, t) { w.order(.above, relativeTo: below) }
+            // Above the border, which is right above the target window. Inside the window with
+            // the border below it, right above the target instead, or the target would hide it.
+            let base = inside && borderBelow ? t : border.flatMap { $0.isVisible ? CGWindowID($0.windowNumber) : nil } ?? t
+            if !w.isVisible || !isDirectlyAbove(w, base) { w.order(.above, relativeTo: Int(base)) }
         } else {
             w.level = .statusBar
             if !w.isVisible { w.orderFrontRegardless() }
         }
     }
 
-    /// True when w is right above the border (wherever the border sits), or right above t
-    /// when the border is hidden.
-    private func isDirectlyAbove(_ w: NSWindow, _ t: CGWindowID) -> Bool {
+    /// True when w is right above window `base` in the on-screen order.
+    private func isDirectlyAbove(_ w: NSWindow, _ base: CGWindowID) -> Bool {
         let ids = onScreenWindows().map(\.id)
-        let base = border.flatMap { $0.isVisible ? CGWindowID($0.windowNumber) : nil } ?? t
         guard let i = ids.firstIndex(of: CGWindowID(w.windowNumber)), let j = ids.firstIndex(of: base) else { return false }
         return i + 1 == j
     }

@@ -200,6 +200,7 @@ def protocol_checks():
     diff_checks(c)
     mode_arg_checks(c)
     gate_word_checks(c)
+    pill_place_checks(c)
     clipboard_checks(c)
     c.close()
 
@@ -1035,6 +1036,27 @@ def gate_word_checks(c):
           all(got.get(w) == "yes" for w in words), text)
     check("confirm gate leaves ordinary labels alone",
           got.get("Formatting help") == "no" and got.get("Show Tab Bar") == "no" and got.get("Zoom In") == "no", text)
+
+
+def pill_place_checks(c):
+    """fix19: where the background pill goes, through the hidden _debug_pill hook (no GUI).
+    Cocoa coordinates (y up); the visible frame starts above an 80 px Dock."""
+    vis, box, win = [0, 80, 1512, 870], [200, 24], [400, 300, 600, 400]
+    cases = [{"id": 1, "frame": win, "box": box, "visible": vis, "front": []},
+             {"id": 2, "frame": win, "box": box, "visible": vis, "front": [[400, 100, 600, 190]]},
+             {"id": 3, "frame": win, "box": box, "visible": vis, "front": [[1100, 100, 300, 300], [400, 500, 600, 400]]},
+             {"id": 4, "frame": [400, 82, 600, 400], "box": box, "visible": vis, "front": []},
+             {"id": 5, "frame": [0, 0, 1512, 982], "box": box, "visible": vis, "front": []}]
+    text, _ = c.call("_debug_pill", cases=cases)
+    got = dict(line.split(": ", 1) for line in text.splitlines())
+    check("pill: room below and nothing in front -> 6 px below the window", got.get("1") == "below 600,270", text)
+    check("pill: a window in front over the spot below -> inside, 8 px above the bottom edge",
+          got.get("2") == "inside 600,308", text)
+    check("pill: windows in front that miss the spot below leave it below", got.get("3") == "below 600,270", text)
+    check("pill: window at the screen bottom -> inside", got.get("4") == "inside 600,90", text)
+    check("pill: full-screen window -> inside, above the Dock", got.get("5") == "inside 656,84", text)
+    text2, _ = c.call("_debug_pill", cases=cases)
+    check("pill: the same layout gives the same answer", text2 == text, (text, text2))
 
 
 LABELS = os.path.join(ROOT, "tests", "gate-labels.jsonl")
@@ -2218,7 +2240,8 @@ ONLY = {"protocol": protocol_checks, "settle": settle_checks, "diff": with_clien
         "indicator": indicator_group, "cc": cc_group, "fix11": fix11_group,
         "pill": lambda: fix11_group(borrows=False), "fix12": fix12_group,
         "fix12-idle": lambda: fix12_group(front_eof=False), "fix13": fix13_group,
-        "audit": audit_checks, "finder": finder_rename_group, "drag": drag_target_group}
+        "audit": audit_checks, "finder": finder_rename_group, "drag": drag_target_group,
+        "placement": with_client(pill_place_checks)}
 
 
 if __name__ == "__main__":

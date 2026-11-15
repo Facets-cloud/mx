@@ -93,6 +93,19 @@ final class Tools {
             return ((args["labels"] as? [String]) ?? []).map { "\($0): \(isDangerous($0) ? "yes" : "no")" }.joined(separator: "\n")
         }
         if name == "_debug_audit" { return debugAudit(args) }
+        // Hidden self-test hook: pillPlacement on plain values, one "id: below|inside x,y" per case.
+        if name == "_debug_pill" {
+            func rect(_ v: Any?) -> CGRect {
+                let n = (v as? [NSNumber])?.map { CGFloat($0.doubleValue) } ?? []
+                return n.count == 4 ? CGRect(x: n[0], y: n[1], width: n[2], height: n[3]) : .zero
+            }
+            return ((args["cases"] as? [[String: Any]]) ?? []).enumerated().map { i, c in
+                let box = rect([0, 0] + ((c["box"] as? [NSNumber]) ?? [])).size
+                let (o, inside) = pillPlacement(rect(c["frame"]), box: box, visible: rect(c["visible"]),
+                                                inFront: ((c["front"] as? [Any]) ?? []).map(rect))
+                return "\((c["id"] as? NSNumber)?.stringValue ?? String(i + 1)): \(inside ? "inside" : "below") \(Int(o.x)),\(Int(o.y))"
+            }.joined(separator: "\n")
+        }
         pendingImage = nil
         audit = AuditCall(title: title, mode: mode.rawValue)
         fakeIdleMs = (args["_fake_idle_ms"] as? NSNumber)?.doubleValue
