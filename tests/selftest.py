@@ -385,8 +385,9 @@ def press_checks():
         text, is_err = c.call("click", role="checkbox", name="align left", **w)
         after = frontmost()
         print(f"      press, no change ({after} in front): {text.splitlines()[0]}")
-        check("press with no visible change reports it and does not mouse-click",
-              not is_err and "(pressed, no visible change)" in text and "clicked at" not in text, text)
+        check("press with no visible effect says so, not \"pressed\", and a native control gets no mouse click",
+              not is_err and 'checkbox "align left": no visible effect (tried AXPress)' in text
+              and "pressed" not in text and "clicked at" not in text, text)
         check("a press works in the background and leaves Finder frontmost",
               after == "com.apple.finder" and "borrowed" not in text, (after, text))
         if made:
@@ -2330,13 +2331,129 @@ def drag_target_group():
             osa(f'tell application id "{prev}" to activate')
 
 
+def fix22_rule_checks(c):
+    """fix22's pure rules through the hidden _debug_fix22 hook (no GUI): when a fill took,
+    which window changes are only counts ticking, and which entered texts Escape removed."""
+    cases = [
+        {"id": 1, "rule": "same_text", "want": "hello", "got": "hello"},
+        {"id": 2, "rule": "same_text", "want": "a  b\nc", "got": "a b\u2028c\n"},
+        {"id": 3, "rule": "same_text", "want": "hi there", "got": "hi\ufffc there"},
+        {"id": 4, "rule": "same_text", "want": "hello", "got": ""},
+        {"id": 5, "rule": "same_text", "want": "hello", "got": "hello\nhello"},
+        {"id": 6, "rule": "counts_only", "a": ['3 button "Inbox, 3 unread"', '4 text "2m"'],
+         "b": ['3 button "Inbox, 4 unread"', '4 text "3m"']},
+        {"id": 7, "rule": "counts_only", "a": ['3 row "Sam"'], "b": ['3 row "Sam"', '4 heading "Sam"']},
+        {"id": 8, "rule": "counts_only", "a": ['3 text "General"'], "b": ['3 text "Random"']},
+        {"id": 9, "rule": "lost", "texts": ["draft reply", "kept"],
+         "before": ['e1 textbox "Reply" = "draft reply"', 'e2 textbox = "kept"'], "after": ['e2 textbox = "kept"']},
+        {"id": 10, "rule": "lost", "texts": ["draft reply"],
+         "before": ['e1 textbox "Reply" = "draft reply"'], "after": ['e1 textbox "Reply"']},
+        {"id": 11, "rule": "lost", "texts": ["draft reply"],
+         "before": ['e1 textbox "Reply" = "draft reply"'], "after": ['e1 textbox "Reply" = "draft reply"']},
+        {"id": 12, "rule": "lost", "texts": ["line one\nline two"],
+         "before": ['e1 textarea = "line one\\nline two"'], "after": []},
+    ]
+    text, _ = c.call("_debug_fix22", cases=cases)
+    got = dict(line.split(": ", 1) for line in text.splitlines())
+    check("fill check: the same text, give or take whitespace, line separators and attachment marks, took",
+          [got.get(str(i)) for i in (1, 2, 3)] == ["yes"] * 3, text)
+    check("fill check: an empty or different read-back didn't take", got.get("4") == "no" and got.get("5") == "no", text)
+    check("press check: digits ticking over (badges, times) are not an effect", got.get("6") == "yes", text)
+    check("press check: added elements or changed words are an effect", got.get("7") == "no" and got.get("8") == "no", text)
+    check("escape: an entered field that disappears or loses its text is reported",
+          got.get("9") == '["draft reply"]' and got.get("10") == '["draft reply"]' and got.get("12") == '["line one\\nline two"]', text)
+    check("escape: entered text still showing is not reported", got.get("11") == "[]", text)
+
+
+def fix22_group():
+    """fix22, on screen in TextEdit (scratch document only): the Escape gate refuses Escape
+    in a field mx filled, passes with confirm, and reports entered text that Escape removed
+    (TextEdit's Find and Replace bar); fill falls back to typing when the value didn't take.
+    Needs the user idle 60 s."""
+    if not gui_idle_gate("fix22 escape gate and fill checks", need=60.0, cap=900.0):
+        return
+    scratch_dir = os.path.join(ROOT, "tests", "scratch")
+    os.makedirs(scratch_dir, exist_ok=True)
+    fname = f"mx-fix22-{os.getpid()}.txt"
+    path = os.path.join(scratch_dir, fname)
+    with open(path, "w") as f:
+        f.write("seed text")
+    c = Client()
+    c.request("initialize", {"protocolVersion": "2025-06-18"})
+    subprocess.run(["open", "-a", "TextEdit", path], check=True)
+    w = {"app": "TextEdit", "window": fname}
+    try:
+        c.call("start", title="mx fix22 check")
+        deadline = time.time() + 10
+        while True:
+            text, is_err = c.call("snapshot", **w)
+            if not is_err or time.time() > deadline:
+                break
+            time.sleep(0.3)
+        ref = re.search(r"(e\d+) textarea", text).group(1)
+
+        # Escape gate on the field mx filled.
+        c.call("fill", ref=ref, text="keep this draft", **w)
+        text, is_err = c.call("key", key="escape", **w)
+        print(f"      escape refusal: {text}")
+        check("escape in a field mx filled is refused and says to pass confirm",
+              is_err and text.startswith("refused: escape can discard the edit in") and "confirm=true" in text, text)
+        text, is_err = c.call("batch", steps=[{"action": "key", "ref": ref, "key": "escape"}], **w)
+        check("a batch escape step on that field is refused too", is_err and "refused: escape" in text, text)
+        text, is_err = c.call("key", ref=ref, key="escape", confirm=True, **w)
+        check("escape with confirm=true passes", not is_err and "pressed escape" in text, text)
+        c.call("key", ref=ref, key="escape", confirm=True, **w)  # closes the completion list the first one opened
+        got = read_until(c, ref, w, "keep this draft")
+        check("the confirmed escape left the text alone", got == "keep this draft", got)
+        c.call("done", summary="escape gate")
+        c.call("start", title="mx fix22 check")
+        text, is_err = c.call("key", ref=ref, key="escape", **w)
+        check("a new session doesn't gate escape on the last session's fills", not is_err, text)
+        c.call("key", ref=ref, key="escape", **w)
+
+        # Entered text that Escape removed: the Find and Replace bar's replace field.
+        c.call("menu", app="TextEdit", path=["Edit", "Find", "Find and Replace"])
+        text, is_err = c.call("fill", role="textbox", name="Replace", text="zebra entered", **w)
+        if is_err:
+            snap, _ = c.call("snapshot", **w)
+            not_run("escape reports the entered text it removed", f"no replace field to fill: {text}\n{snap[:600]}")
+        else:
+            text, is_err = c.call("key", key="escape", **w)
+            check("escape in the filled replace field is refused", is_err and "refused: escape" in text, text)
+            text, is_err = c.call("key", key="escape", confirm=True, **w)
+            shot = os.path.join(scratch_dir, "fix22-escape-removed.png")
+            subprocess.run(["screencapture", "-x", shot])
+            print(f"      escape removed: {text.splitlines()[:6]}; saved {shot}")
+            check("escape that closes the bar says it removed the text mx entered",
+                  not is_err and 'escape removed "zebra entered", which you entered' in text, text)
+
+        # Fill that didn't take falls back to typing (the hidden flag skips the AXValue set).
+        text, is_err = c.call("fill", ref=ref, text="plain fill", **w)
+        check("a fill that takes says filled", not is_err and text.startswith("filled textarea"), text)
+        text, is_err = c.call("fill", ref=ref, text="typed instead\nsecond line", _fake_fill_ignored=True, **w)
+        got, _ = c.call("read", ref=ref, **w)
+        shot = os.path.join(scratch_dir, "fix22-fill-typed.png")
+        subprocess.run(["screencapture", "-x", shot])
+        print(f"      fill fallback: {text.splitlines()[0]}; read {got!r}; saved {shot}")
+        check("a fill that didn't take types the text instead and says so, newline and all, without confirm",
+              not is_err and text.startswith("fill didn't take; typed it instead: typed 25 characters")
+              and got.replace("\u2028", "\n") == "typed instead\nsecond line", (text, got))
+        c.call("done", summary="fix22 checks")
+    finally:
+        close_scratch(c, w, path)
+        c.close()
+        if os.path.exists(path):
+            os.remove(path)
+
+
 # Check groups `--only` can run on their own (fix10 and later).
 ONLY = {"protocol": protocol_checks, "settle": settle_checks, "diff": with_client(diff_checks), "gate": with_client(gate_table_checks),
         "indicator": indicator_group, "cc": cc_group, "fix11": fix11_group,
         "pill": lambda: fix11_group(borrows=False), "fix12": fix12_group,
         "fix12-idle": lambda: fix12_group(front_eof=False), "fix13": fix13_group,
         "audit": audit_checks, "finder": finder_rename_group, "drag": drag_target_group,
-        "placement": with_client(pill_place_checks), "donepill": done_pill_group}
+        "placement": with_client(pill_place_checks), "donepill": done_pill_group,
+        "fix22rules": with_client(fix22_rule_checks), "fix22": fix22_group, "press": press_checks}
 
 
 if __name__ == "__main__":

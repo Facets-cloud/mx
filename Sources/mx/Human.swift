@@ -70,14 +70,15 @@ func nearCenter(_ r: CGRect) -> CGPoint {
     return CGPoint(x: r.midX + .random(in: -jx...max(jx, 0.001)), y: r.midY + .random(in: -jy...max(jy, 0.001)))
 }
 
-/// Types text into the app one key event per character (newlines as Return).
+/// Types text into the app one key event per character (newlines as `newline`, Return by default).
 /// `pace` is the pause after each character: human pace in watch mode, minimal otherwise.
 /// `hid` posts through the HID tap instead of to the pid (see post).
-func typeText(_ text: String, to pid: pid_t, hid: Bool = false, pace: () -> Double) {
+func typeText(_ text: String, to pid: pid_t, hid: Bool = false, newline: KeyCombo = KeyCombo(code: 36, flags: [], char: nil),
+              pace: () -> Double) {
     let src = CGEventSource(stateID: .privateState)
     for ch in text {
         if ch == "\n" || ch == "\r\n" || ch == "\r" {
-            post(KeyCombo(code: 36, flags: [], char: nil), to: pid, hid: hid)
+            post(newline, to: pid, hid: hid)
         } else {
             var u = Array(String(ch).utf16)
             for down in [true, false] {

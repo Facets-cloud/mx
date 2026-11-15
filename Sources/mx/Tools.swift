@@ -91,6 +91,10 @@ final class Tools {
     var savedClipboard: SavedClipboard?
     /// Self-test only: `_fake_idle_ms` on a call stands in for the user's idle time.
     private var fakeIdleMs: Double?
+    /// Text fields this session filled or typed into, with the text, for the Escape gate.
+    private var entered: [(el: AXUIElement, text: String)] = []
+    /// Set when the current call pressed Escape, so acting can say what it threw away.
+    private var escaped = false
 
     // MARK: dispatch
 
@@ -104,6 +108,23 @@ final class Tools {
             return ((args["labels"] as? [String]) ?? []).map { "\($0): \(isDangerous($0) ? "yes" : "no")" }.joined(separator: "\n")
         }
         if name == "_debug_audit" { return debugAudit(args) }
+        // Hidden self-test hooks for fix22's pure rules, one "id: yes|no" (or the lost texts) per case.
+        if name == "_debug_fix22" {
+            func yn(_ b: Bool) -> String { b ? "yes" : "no" }
+            func lines(_ v: Any?) -> [Line] { ((v as? [String]) ?? []).map { s in
+                let p = s.split(separator: " ", maxSplits: 1).map(String.init)
+                return Line(ref: p[0], indent: 0, text: p.count > 1 ? p[1] : "")
+            } }
+            return ((args["cases"] as? [[String: Any]]) ?? []).enumerated().map { i, c in
+                let id = (c["id"] as? NSNumber)?.stringValue ?? String(i + 1)
+                switch c["rule"] as? String {
+                case "same_text": return "\(id): \(yn(sameText(c["want"] as? String ?? "", c["got"] as? String ?? "")))"
+                case "counts_only": return "\(id): \(yn(onlyCountsChanged(c["a"] as? [String] ?? [], c["b"] as? [String] ?? [])))"
+                case "lost": return "\(id): \(lostEntries(c["texts"] as? [String] ?? [], lines(c["before"]), lines(c["after"])))"
+                default: return "\(id): unknown rule"
+                }
+            }.joined(separator: "\n")
+        }
         // Hidden self-test hook: pillPlacement on plain values, one "id: below|inside x,y width" per case.
         if name == "_debug_pill" {
             func rect(_ v: Any?) -> CGRect {
@@ -183,7 +204,7 @@ final class Tools {
             title = newTitle ?? title
         } else {
             title = newTitle
-            started = now(); actions = 0
+            started = now(); actions = 0; entered = []
         }
         audit.title = title; audit.mode = mode.rawValue
         return "\(continuing ? "updated" : "started") \"\(title ?? "untitled")\" (mode \(mode.rawValue), typing \(typing.rawValue))"
@@ -197,7 +218,7 @@ final class Tools {
         tracked = nil; acted = nil
         Overlay.shared.finish("Done: \(summary.isEmpty ? (title ?? "") : summary)", pointer: mode.inFront)
         releaseCursor()
-        started = nil; title = nil; actions = 0
+        started = nil; title = nil; actions = 0; entered = []
         mode = envDefault("MX_MODE", Mode.background); typing = envDefault("MX_TYPING", Typing.paste)
         return result
     }
@@ -290,6 +311,7 @@ final class Tools {
         let nodes0 = walkAll(w0, single: ctx.scope == .window)
         let before = ctx.st.render(nodes0)
         borrowNotes = []
+        escaped = false
         defer { endBorrow() }  // hand the front back even if the step fails
         var msg = try body()
         borrow?.mark("act")
@@ -314,6 +336,7 @@ final class Tools {
         let same = w0.count == w1.count && zip(w0, w1).allSatisfy { CFEqual($0, $1) }
         if !same || ctx.title(w1) != title0 { audit.to = w1.first.map(windowTitle) }
         logSnapshotChoice(sameWindow: same, before: before.count, after: after.count, settled: settled, titleWait: wait)
+        if escaped { msg += lostEntries(entered.map(\.text), before, after).map { "\nescape removed \(quote($0, 60)), which you entered" }.joined() }
         if wantsFullSnapshot(sameWindow: same) {
             return msg + "\n\(ctx.scope == .window ? "window" : "scope") changed: " + header(ctx, w1, after.count) + "\n" + format(after)
         }
@@ -498,7 +521,8 @@ final class Tools {
             try settingsGate(ctx, n.el, "fill \(describe(n))", confirm: confirm)
             if n.role == "AXSlider" || n.role == "AXIncrementor" { return try setLevel(n, text) }
             if let url = finderItemURL(ctx, n) { return try renameFinderItem(ctx, n, url, text) }
-            return typing == .keys ? try typeInto(ctx, n, text, confirm: confirm) : try fill(n, text)
+            return typing == .keys ? try typeInto(ctx, n, text, confirm: confirm)
+                : try fill(ctx, n, text, ignored: args["_fake_fill_ignored"] as? Bool ?? false)
         case "key":
             guard let combo = args["key"] as? String else { throw MXError("key needs key, such as cmd+k or return") }
             let hasTarget = (args["ref"] as? String).map { !$0.isEmpty } ?? false || args["role"] != nil
@@ -513,9 +537,10 @@ final class Tools {
     // MARK: actions
 
     /// AXPress (or the AX action named by `action`) when the element has it; a real mouse
-    /// click at the element's visible center only when it has no AXPress, force_mouse is set,
-    /// count is 2, button is right, or it is a row, cell or menu extra whose press changed
-    /// nothing (Electron rows ignore AXPress). The gates (send/delete-style labels, sensitive
+    /// click at the element's visible center when it has no AXPress, force_mouse is set,
+    /// count is 2 or button is right. A row, cell, menu extra or web control whose press
+    /// shows no effect gets return, then the mouse; the result names the path that worked,
+    /// or says "no visible effect" when none did. The gates (send/delete-style labels, sensitive
     /// System Settings panes, permission prompts) run before either path.
     private func click(_ ctx: Ctx, _ n: Node, _ args: [String: Any]) throws -> String {
         // In a batch step "action" is "click", so the AX action comes as click_action there.
@@ -543,28 +568,67 @@ final class Tools {
             actions += 1
             return what + " (clicked at \(Int(p.x)),\(Int(p.y)) with the real mouse)"
         }
-        var how = ""
         if actionNames(n.el).contains(axAction) {
             show("\(action == "press" ? "Click" : action.capitalized) \u{201C}\(label.prefix(40))\u{201D}", at: liveFrame(n.el), click: true)
-            let before = sig(ctx)
+            // Rows, menu extras and web content often ignore AXPress, so a press there that
+            // shows no effect falls back to return, then the mouse. Native controls keep
+            // AXPress alone: their effect can be off screen (copy), and a retry would repeat it.
+            let fallback = action == "press" && !["AXMenuItem", "AXMenuBarItem"].contains(n.role)
+                && (rowRoles.contains(n.role) || n.subrole == "AXMenuExtra" || inWebContent(n.el))
+            var before = pressProbe(ctx, n)
             AXUIElementSetMessagingTimeout(n.el, 1.0)
             let r = AXUIElementPerformAction(n.el, axAction as CFString)
             // A menu or modal opened by the action keeps the app busy: the action ran, the reply timed out.
             guard r == .success || r == .cannotComplete else { throw MXError("could not \(action) \(describe(n)) (AX error \(r.rawValue))") }
             // Only decides whether the press did anything; the title wait for a click
             // happens once, in the settle that follows the action (acting).
-            settle(ctx, since: before, titleWait: false)
-            if sig(ctx) != before { actions += 1; return what + " (\(action == "press" ? "pressed" : axAction))" }
-            guard action == "press", rowRoles.contains(n.role) || n.subrole == "AXMenuExtra" else {
-                actions += 1; return what + " (\(action == "press" ? "pressed" : axAction), no visible change)"
+            settle(ctx, since: before.sig, titleWait: false)
+            actions += 1
+            if pressChanged(before, pressProbe(ctx, n), ignoringCounts: fallback) { return what + " (\(action == "press" ? "pressed" : axAction))" }
+            let noEffect = "\(displayRole(n)) \(quote(label, 60)): no visible effect"
+            guard fallback else { return noEffect + " (tried \(action == "press" ? "AXPress" : axAction))" }
+            var tried = ["AXPress"]
+            // Return on the element itself, posted in the background. Never on a text input
+            // (it could send), and only once the element holds the app's keyboard focus.
+            if submitGateReason(n.el) == nil, let w = try? ctx.window(),
+               let f = (try? focusForKeys(ctx, w, n)) ?? nil, CFEqual(f, n.el) {
+                before = pressProbe(ctx, n)
+                post(try parseKey("return"), to: ctx.app.processIdentifier)
+                settle(ctx, since: before.sig, titleWait: false)
+                if pressChanged(before, pressProbe(ctx, n), ignoringCounts: true) {
+                    return what + " (AXPress changed nothing; focused it and pressed return)"
+                }
+                tried.append("return")
             }
-            how = "pressed, no visible change; "
+            // Last, the real mouse, which borrows the front in background mode.
+            before = pressProbe(ctx, n)
+            let p = try mouseClick(ctx, n, label)
+            settle(ctx, since: before.sig, titleWait: false)
+            let at = "clicked at \(Int(p.x)),\(Int(p.y))"
+            if pressChanged(before, pressProbe(ctx, n), ignoringCounts: true) {
+                return what + " (\(tried.joined(separator: " and ")) changed nothing; \(at))"
+            }
+            return noEffect + " (tried \(tried.joined(separator: ", ")), mouse: \(at))"
         } else if action != "press" && action != "showmenu" {
             throw MXError("\(describe(n)) has no \(axAction); it supports \(actionNames(n.el).filter { !$0.contains("\n") }.joined(separator: ", "))")
         }
         let p = try mouseClick(ctx, n, label, right: action == "showmenu", count: 1)
         actions += 1
-        return what + " (\(how)\(action == "showmenu" ? "right-" : "")clicked at \(Int(p.x)),\(Int(p.y)))"
+        return what + " (\(action == "showmenu" ? "right-" : "")clicked at \(Int(p.x)),\(Int(p.y)))"
+    }
+
+    /// What a press can change: the window's tree and title, and the target's own state
+    /// (gone, selected, value, focused, expanded), which the snapshot lines don't all show.
+    private func pressProbe(_ ctx: Ctx, _ n: Node) -> (sig: (tree: [String], title: String), target: [String]) {
+        let target = [kAXRoleAttribute, kAXSelectedAttribute, kAXValueAttribute, kAXFocusedAttribute, kAXExpandedAttribute]
+            .map { copyAttr(n.el, $0).map { "\($0)" } ?? "-" }
+        return (sig(ctx), target)
+    }
+
+    private func pressChanged(_ a: (sig: (tree: [String], title: String), target: [String]),
+                              _ b: (sig: (tree: [String], title: String), target: [String]), ignoringCounts: Bool) -> Bool {
+        if a.target != b.target || a.sig.title != b.sig.title { return true }
+        return a.sig.tree != b.sig.tree && !(ignoringCounts && onlyCountsChanged(a.sig.tree, b.sig.tree))
     }
 
     /// Scrolls the element into view, brings its window to the front (regular apps only:
@@ -639,15 +703,32 @@ final class Tools {
         return false
     }
 
-    private func fill(_ n: Node, _ text: String) throws -> String {
+    /// Sets the value in one go. A text field is read back (for up to 300 ms); when the text
+    /// didn't take (rich-text and web composers often ignore AXValue), mx types it key by key
+    /// once, with shift+return for line breaks so none can send. `ignored` (self-test only)
+    /// skips the set, standing in for such a field.
+    private func fill(_ ctx: Ctx, _ n: Node, _ text: String, ignored: Bool = false) throws -> String {
         if n.isSecure { throw MXError("mx never touches password fields", rule: "secure field") }
         var settable: DarwinBoolean = false
         AXUIElementIsAttributeSettable(n.el, kAXValueAttribute as CFString, &settable)
         guard settable.boolValue else { throw MXError("\(describe(n)) does not take a value; click it and use key instead") }
         show("Paste \(text.count) characters", at: liveFrame(n.el))
         AXUIElementSetAttributeValue(n.el, kAXFocusedAttribute as CFString, kCFBooleanTrue)
-        let r = AXUIElementSetAttributeValue(n.el, kAXValueAttribute as CFString, text as CFString)
-        guard r == .success else { throw MXError("could not set the value of \(describe(n)) (AX error \(r.rawValue))") }
+        if !ignored {
+            let r = AXUIElementSetAttributeValue(n.el, kAXValueAttribute as CFString, text as CFString)
+            guard r == .success else { throw MXError("could not set the value of \(describe(n)) (AX error \(r.rawValue))") }
+        }
+        let isText = textInputRoles.contains(n.role) || copyAttr(n.el, "AXEditableAncestor") != nil
+        if isText {
+            let deadline = now() + 0.3
+            while !sameText(text, stringValue(copyAttr(n.el, kAXValueAttribute))) {
+                guard now() < deadline else {
+                    return "fill didn't take; typed it instead: " + (try typeInto(ctx, n, text, confirm: false, lineBreak: "shift+return"))
+                }
+                usleep(30_000)
+            }
+            entered.append((n.el, text))
+        }
         actions += 1
         return "filled \(displayRole(n)) with \(text.count) characters"
     }
@@ -721,6 +802,12 @@ final class Tools {
         if !confirm && isSubmitKey(k) && !panel, let why = submitGateReason(n?.el ?? focused) {
             throw MXError("refused: \(combo) in a text box can send it (\(why)); ask the user, then pass confirm=true", rule: "send gate")
         }
+        if isEscapeKey(k) {
+            if !confirm, let field = escapeRisk(n?.el ?? focused) {
+                throw MXError("refused: escape can discard the edit in \(field); pass confirm=true if that's intended", rule: "escape gate")
+            }
+            escaped = true
+        }
         if !confirm && isTrashShortcut(k) && isFinder(name: ctx.name, bundle: ctx.app.bundleIdentifier) {
             throw MXError("refused: \(combo) in Finder moves the selection to the Trash or deletes it; ask the user, then pass confirm=true", rule: "finder trash")
         }
@@ -735,6 +822,17 @@ final class Tools {
         if copies { awaitClipboardWrite() }
         actions += 1
         return "pressed \(combo)"
+    }
+
+    /// The field whose entered text Escape on `el` can throw away: `el` itself when this
+    /// session filled or typed into it, or such a field in the popover, sheet or dialog
+    /// that holds `el`. Fields that are empty again don't count. Nil when there is none.
+    private func escapeRisk(_ el: AXUIElement?) -> String? {
+        guard let el else { return nil }
+        let live = entered.map(\.el).filter { !stringValue(copyAttr($0, kAXValueAttribute)).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        if let hit = live.first(where: { CFEqual($0, el) }) { return fieldLabel(hit) }
+        guard let box = ancestors(el).first(where: isTransientContainer) else { return nil }
+        return live.first { ancestors($0).contains { CFEqual($0, box) } }.map(fieldLabel)
     }
 
     /// Keys for a panel the panel service draws go through the HID tap, which reaches whatever
@@ -773,8 +871,9 @@ final class Tools {
     /// typing=keys: focuses the element, clears it (select all, Delete), and types the text one key event per
     /// character, at 40-80 ms a character in watch mode and as fast as the app takes it
     /// otherwise. A newline would go in as Return, which can send, so it needs confirm.
-    private func typeInto(_ ctx: Ctx, _ n: Node, _ text: String, confirm: Bool) throws -> String {
-        if !confirm && text.contains(where: { $0.isNewline }) {
+    /// `lineBreak` types each newline as that key instead (fill's fallback passes shift+return).
+    private func typeInto(_ ctx: Ctx, _ n: Node, _ text: String, confirm: Bool, lineBreak: String? = nil) throws -> String {
+        if !confirm && lineBreak == nil && text.contains(where: { $0.isNewline }) {
             throw MXError("refused: the text has a newline, and typed key by key it is a Return, which can send it; " +
                 "ask the user, then pass confirm=true (or use shift+return between lines)", rule: "newline gate")
         }
@@ -785,7 +884,9 @@ final class Tools {
         show("Type \(text.count) characters", at: liveFrame(n.el))
         try clearByKeys(ctx, n, hid: panel)
         let watch = mode == .watch
-        typeText(text, to: ctx.app.processIdentifier, hid: panel, pace: { watch ? .random(in: 0.04...0.08) : 0.004 })
+        typeText(text, to: ctx.app.processIdentifier, hid: panel, newline: try parseKey(lineBreak ?? "return"),
+                 pace: { watch ? .random(in: 0.04...0.08) : 0.004 })
+        entered.append((n.el, text))
         actions += 1
         return "typed \(text.count) characters into \(displayRole(n))"
     }

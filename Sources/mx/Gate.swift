@@ -95,3 +95,64 @@ extension Tools {
         }.joined(separator: "\n")
     }
 }
+
+// MARK: - Escape gate, press check and fill check (fix22)
+
+/// Escape, with or without modifiers.
+func isEscapeKey(_ k: KeyCombo) -> Bool { k.code == 53 }
+
+/// The element and its parents, innermost first (at most 40).
+func ancestors(_ el: AXUIElement) -> [AXUIElement] {
+    var out: [AXUIElement] = [], cur: AXUIElement? = el
+    while let e = cur, out.count < 40 { out.append(e); cur = axEl(e, kAXParentAttribute) }
+    return out
+}
+
+/// Popovers, sheets and dialogs: containers that Escape usually closes, edits and all.
+func isTransientContainer(_ el: AXUIElement) -> Bool {
+    ["AXPopover", "AXSheet"].contains(copyAttr(el, kAXRoleAttribute) as? String ?? "")
+        || ["AXDialog", "AXSystemDialog"].contains(copyAttr(el, kAXSubroleAttribute) as? String ?? "")
+}
+
+/// A field as a person names it: its label or placeholder, else its role description.
+func fieldLabel(_ el: AXUIElement) -> String {
+    let label = [kAXTitleAttribute, kAXDescriptionAttribute, "AXPlaceholderValue"]
+        .lazy.compactMap { copyAttr(el, $0) as? String }.first { !$0.isEmpty }
+    return label.map { quote($0, 40) } ?? (copyAttr(el, kAXRoleDescriptionAttribute) as? String ?? "a text field")
+}
+
+/// Entered texts that showed in `before` and no longer show on the same element in
+/// `after` (the element is gone, or its value lost the text). Matches the first 30
+/// characters as the snapshot lines quote them.
+func lostEntries(_ texts: [String], _ before: [Line], _ after: [Line]) -> [String] {
+    let now = Dictionary(after.map { ($0.ref, $0.text) }, uniquingKeysWith: { a, _ in a })
+    var seen = Set<String>()
+    return texts.filter { t in
+        guard !t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, seen.insert(t).inserted else { return false }
+        let needle = String(quote(String(t.prefix(30)), 80).dropFirst().dropLast())
+        return before.contains { $0.text.contains(needle) && !(now[$0.ref]?.contains(needle) ?? false) }
+    }
+}
+
+/// True when a field's read-back value is the text mx set, give or take whitespace, line
+/// break characters and the object-replacement characters rich text uses for attachments.
+func sameText(_ want: String, _ got: String) -> Bool {
+    func norm(_ s: String) -> String {
+        s.replacingOccurrences(of: "\u{FFFC}", with: "")
+            .components(separatedBy: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "\u{2028}\u{2029}")))
+            .filter { !$0.isEmpty }.joined(separator: " ")
+    }
+    return norm(want) == norm(got)
+}
+
+/// True when two snapshots of a window differ only in digits, such as an unread badge
+/// or a relative time ticking over: not an effect of a press.
+func onlyCountsChanged(_ a: [String], _ b: [String]) -> Bool {
+    func strip(_ s: String) -> String { s.replacingOccurrences(of: "[0-9]+", with: "#", options: .regularExpression) }
+    return a.count == b.count && zip(a, b).allSatisfy { strip($0) == strip($1) }
+}
+
+/// True inside a web area (web views, Electron apps), where controls often ignore AXPress.
+func inWebContent(_ el: AXUIElement) -> Bool {
+    ancestors(el).dropFirst().contains { copyAttr($0, kAXRoleAttribute) as? String == "AXWebArea" }
+}

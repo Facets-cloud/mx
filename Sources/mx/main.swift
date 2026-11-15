@@ -70,8 +70,8 @@ let toolList: [[String: Any]] = [
      "inputSchema": obj(["app": appArg, "window": windowArg, "scope": scopeArg,
                          "interactive": bool("Default true: controls plus the text around them. false: every element.")], ["app"])],
     ["name": "click", "description": "Press a button, link, tab, row, menu extra or other control. Uses AXPress (or the AX action named by action) when the element has it " +
-        "(rows, cells and menu extras whose press changes nothing get a mouse click), else a real click at the element's center (the window comes to the front). " +
-        "count 2 double-clicks and button right right-clicks, with the mouse. Returns which path ran and what changed. " +
+        "(rows, cells, menu extras and web controls whose press changes nothing get return, then a mouse click), else a real click at the element's center (the window comes to the front). " +
+        "count 2 double-clicks and button right right-clicks, with the mouse. Returns which path ran and what changed, or \"no visible effect\" when nothing did. " +
         "Send/delete/restart-style labels and changes in sensitive System Settings panes are refused unless confirm is true: ask the user before you pass it. " +
         "Buttons in macOS permission prompts are always refused.",
      "inputSchema": obj(target(["confirm": confirmArg,
@@ -82,6 +82,7 @@ let toolList: [[String: Any]] = [
         "button": ["type": "string", "enum": ["left", "right"], "description": "right for a right-click (mouse)."]]), ["app"])],
     ["name": "fill", "description": "Set the text of a text field or text area (replaces what is there), or the level of a slider: " +
         "\"75%\" (or 75 on a 0-1 slider) of its range, \"+10%\" or \"-10%\" from where it is, or a value in its own range; the result reads the level back. Returns what changed. " +
+        "A text field is read back; if the text didn't take, it is typed key by key once (shift+return for line breaks) and the result says so. " +
         "With typing=keys (see start) the text is typed key by key, and text with a newline is refused unless confirm is true, " +
         "since a typed newline is a Return that can send. " +
         "On a Finder item (its image in icon view, its name textbox in list view) fill renames the file, in the background; give the full name with any extension.",
@@ -93,6 +94,8 @@ let toolList: [[String: Any]] = [
         "With ref or role, focuses that element first. Return, enter or keypad enter (with any modifier except shift alone) " +
         "into a text box (the target, else the focused element) is refused unless confirm is true, because it can send a message: " +
         "ask the user before you pass it. shift+return, other keys, and return in a search or filter box need no confirm. " +
+        "Escape is refused unless confirm is true while focus is in a field filled or typed into this session (or in a popover or sheet holding one), " +
+        "since it can discard the edit; when an Escape removes text you entered, the result says so. " +
         "Save and Open panels: fill textbox \"Save As:\" with the name; to pick a folder, key cmd+shift+g, fill the textbox it shows " +
         "(role textbox, name \"\") with a path such as ~/Documents, then key return (no confirm in these panels); one batch can do it all, " +
         "ending with read textbox \"Save As:\" and read popup \"Where:\". Check both, then click button \"Save\".",
