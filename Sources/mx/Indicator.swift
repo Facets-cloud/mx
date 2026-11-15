@@ -79,14 +79,19 @@ private func isCovered(_ target: CGRect, by above: [CGRect]) -> Bool {
 /// Where the pill goes for target window frame `f`: centered 6 px below it, or inside it
 /// 8 px above its bottom edge when the spot below is off `visible` (the screen's visible
 /// frame) or a window in front of the target (`inFront`) overlaps it. Inside is set when
-/// the pill goes inside. Pure, so the same layout always gives the same answer.
-func pillPlacement(_ f: CGRect, box: CGSize, visible: CGRect, inFront: [CGRect]) -> (origin: CGPoint, inside: Bool) {
-    let x = f.midX - box.width / 2
-    let below = CGRect(x: x, y: f.minY - 6 - box.height, width: box.width, height: box.height)
+/// the pill goes inside. Inside, the pill is at most the window's width less 8 px a side,
+/// so the caller truncates its text; below, it may be wider than the window but is shifted
+/// to stay on screen, and that shifted rect is what must clear the windows in front.
+/// Pure, so the same layout always gives the same answer.
+func pillPlacement(_ f: CGRect, box: CGSize, visible: CGRect, inFront: [CGRect]) -> (frame: CGRect, inside: Bool) {
+    let w = min(box.width, visible.width - 8)
+    let x = min(max(f.midX - w / 2, visible.minX + 4), visible.maxX - 4 - w)
+    let below = CGRect(x: x, y: f.minY - 6 - box.height, width: w, height: box.height)
     if below.minY >= visible.minY && !inFront.contains(where: { $0.intersects(below) }) {
-        return (below.origin, false)
+        return (below, false)
     }
-    return (CGPoint(x: x, y: max(f.minY + 8, visible.minY + 4)), true)
+    let iw = min(box.width, max(f.width - 16, 0))
+    return (CGRect(x: f.midX - iw / 2, y: max(f.minY + 8, visible.minY + 4), width: iw, height: box.height), true)
 }
 
 final class Indicator {
@@ -251,28 +256,30 @@ final class Indicator {
         let size = (text as NSString).size(withAttributes: [.font: font])
         let lead: CGFloat = icon == .none ? 12 : 12 + 12 + 6  // padding, icon, gap
         let box = CGSize(width: lead + ceil(size.width) + 12, height: 24)
-        let origin: CGPoint
+        let frame: CGRect
         var inside = false
         if let f {
             let screen = NSScreen.screens.first { $0.frame.intersects(f) } ?? NSScreen.main ?? NSScreen.screens[0]
-            (origin, inside) = pillPlacement(f, box: box, visible: screen.visibleFrame, inFront: inFront)
+            (frame, inside) = pillPlacement(f, box: box, visible: screen.visibleFrame, inFront: inFront)
         } else {
             let vf = (NSScreen.main ?? NSScreen.screens[0]).visibleFrame  // above the Dock
-            origin = CGPoint(x: vf.midX - box.width / 2, y: vf.minY + 12)
+            frame = CGRect(x: vf.midX - box.width / 2, y: vf.minY + 12, width: box.width, height: box.height)
         }
-        let frame = CGRect(origin: origin, size: box)
+        let resized = w.frame.size != frame.size
         if w.frame != frame { w.setFrame(frame, display: false) }
-        if label.string as? String != text || shownIcon != icon {
+        if resized || label.string as? String != text || shownIcon != icon {
             shownIcon = icon
             CATransaction.begin(); CATransaction.setDisableActions(true)
-            pill.frame = CGRect(origin: .zero, size: box)
+            pill.frame = CGRect(origin: .zero, size: frame.size)
             spinner.isHidden = icon != .spinner
             check.isHidden = icon != .check
             spinner.contentsScale = w.backingScaleFactor
             check.contentsScale = w.backingScaleFactor
             label.string = text
             label.contentsScale = w.backingScaleFactor
-            label.frame = CGRect(x: lead, y: (box.height - ceil(size.height)) / 2, width: ceil(size.width) + 2, height: ceil(size.height))
+            // A pill narrower than its text (inside a narrow window) ends the text with "…".
+            let lw = min(ceil(size.width) + 2, max(frame.width - lead - 12, 0))
+            label.frame = CGRect(x: lead, y: (box.height - ceil(size.height)) / 2, width: lw, height: ceil(size.height))
             CATransaction.commit()
         }
         if f != nil, let t = target {
@@ -334,6 +341,7 @@ final class Indicator {
         label.fontSize = 11
         label.foregroundColor = NSColor.white.cgColor
         label.contentsGravity = .left  // a changed tag never stretches the old text while it redraws
+        label.truncationMode = .end
         label.actions = noTextActions
         // A 12 pt, 270° arc, the macOS "working" idiom. Core Animation spins it in the render
         // server at display rate, so mx does no per-frame work.

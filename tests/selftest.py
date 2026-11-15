@@ -1046,15 +1046,26 @@ def pill_place_checks(c):
              {"id": 2, "frame": win, "box": box, "visible": vis, "front": [[400, 100, 600, 190]]},
              {"id": 3, "frame": win, "box": box, "visible": vis, "front": [[1100, 100, 300, 300], [400, 500, 600, 400]]},
              {"id": 4, "frame": [400, 82, 600, 400], "box": box, "visible": vis, "front": []},
-             {"id": 5, "frame": [0, 0, 1512, 982], "box": box, "visible": vis, "front": []}]
+             {"id": 5, "frame": [0, 0, 1512, 982], "box": box, "visible": vis, "front": []},
+             # fix21: the 504 pt done pill. Inside a 300 pt window it shrinks to fit; below a
+             # narrow window near the screen edge it keeps its width and shifts onto the screen.
+             {"id": 6, "frame": [400, 300, 300, 400], "box": [504, 24], "visible": vis, "front": [[400, 100, 600, 190]]},
+             {"id": 7, "frame": [1300, 300, 200, 400], "box": [504, 24], "visible": vis, "front": []},
+             {"id": 8, "frame": [600, 300, 300, 400], "box": [504, 24], "visible": vis, "front": [[860, 100, 400, 190]]}]
     text, _ = c.call("_debug_pill", cases=cases)
     got = dict(line.split(": ", 1) for line in text.splitlines())
-    check("pill: room below and nothing in front -> 6 px below the window", got.get("1") == "below 600,270", text)
+    check("pill: room below and nothing in front -> 6 px below the window", got.get("1") == "below 600,270 200", text)
     check("pill: a window in front over the spot below -> inside, 8 px above the bottom edge",
-          got.get("2") == "inside 600,308", text)
-    check("pill: windows in front that miss the spot below leave it below", got.get("3") == "below 600,270", text)
-    check("pill: window at the screen bottom -> inside", got.get("4") == "inside 600,90", text)
-    check("pill: full-screen window -> inside, above the Dock", got.get("5") == "inside 656,84", text)
+          got.get("2") == "inside 600,308 200", text)
+    check("pill: windows in front that miss the spot below leave it below", got.get("3") == "below 600,270 200", text)
+    check("pill: window at the screen bottom -> inside", got.get("4") == "inside 600,90 200", text)
+    check("pill: full-screen window -> inside, above the Dock", got.get("5") == "inside 656,84 200", text)
+    check("pill: a pill wider than the window goes inside at the window's width less 8 px a side",
+          got.get("6") == "inside 408,308 284", text)
+    check("pill: a wide pill below a window at the screen edge shifts left to stay on screen",
+          got.get("7") == "below 1004,270 504", text)
+    check("pill: the wide pill's full width counts against windows in front (only its end is covered -> inside)",
+          got.get("8") == "inside 608,308 284", text)
     text2, _ = c.call("_debug_pill", cases=cases)
     check("pill: the same layout gives the same answer", text2 == text, (text, text2))
 
@@ -1633,6 +1644,83 @@ def indicator_group():
         close_finder_window(fw)
         close_scratch(c, w, path)
         c.close()
+        if os.path.exists(path):
+            os.remove(path)
+
+
+def done_pill_group():
+    """fix21, on screen: done puts the summary pill on the window of the last action, not on
+    an app only read after it; and the wide done pill inside a narrow window at the screen
+    bottom is no wider than the window. TextEdit and Calculator only; saves two screenshots
+    to tests/scratch. Needs the user idle 60 s."""
+    if not gui_idle_gate("done pill checks", need=60.0, cap=600.0):
+        return
+    scratch_dir = os.path.join(ROOT, "tests", "scratch")
+    os.makedirs(scratch_dir, exist_ok=True)
+    fname = f"mx-donepill-{os.getpid()}.txt"
+    path = os.path.join(scratch_dir, fname)
+    with open(path, "w") as f:
+        f.write("seed text")
+    had_calc = subprocess.run(["pgrep", "-x", "Calculator"], capture_output=True).returncode == 0
+    c = Client()
+    c.request("initialize", {"protocolVersion": "2025-06-18"})
+    subprocess.run(["open", "-a", "TextEdit", path], check=True)
+    subprocess.run(["open", "-a", "Calculator"], check=True)
+    w = {"app": "TextEdit", "window": fname}
+    sw, sh = screen_size()
+
+    def border_and_wave():
+        mine = mx_windows(c, window_list())
+        return (next((f for _, k, f in mine if k == "border"), None), next((f for _, k, f in mine if k == "wave"), None))
+
+    try:
+        c.call("start", title="mx done pill check", mode="background")
+        deadline = time.time() + 10
+        while True:
+            text, is_err = c.call("snapshot", **w)
+            if not is_err or time.time() > deadline:
+                break
+            time.sleep(0.3)
+        ref = re.search(r"(e\d+) textarea", text).group(1)
+        c.call("window", app="Calculator", op="move", x=sw - 400, y=120)
+        c.call("window", op="move", x=80, y=120, **w)
+        c.call("window", op="resize", w=700, h=400, **w)
+        frame = window_frame(c, w)
+        c.call("fill", ref=ref, text="last action", **w)
+        c.call("snapshot", app="Calculator")  # a read of another app after the last action
+        c.call("done", summary="the pill stays on TextEdit, where the last action ran")
+        time.sleep(0.6)
+        border, wave = border_and_wave()
+        shot = os.path.join(scratch_dir, "done-pill-last-target.png")
+        subprocess.run(["screencapture", "-x", shot])
+        print(f"      last target: border {border}, wave {wave}, TextEdit {frame}; saved {shot}")
+        check("done: the border goes back to the window of the last action, not the app read after it",
+              border == (frame[0] - 3, frame[1] - 3, frame[2] + 6, frame[3] + 6),
+              (border, frame, [l for l in c.stderr if "border hidden" in l]))
+        check("done: the summary pill sits under that window",
+              wave is not None and abs(wave[0] + wave[2] / 2 - (frame[0] + frame[2] / 2)) <= 1, (wave, frame))
+        time.sleep(3.5)
+
+        # A narrow window at the screen bottom: the wide summary pill goes inside and fits.
+        c.call("start", title="mx done pill check", mode="background")
+        c.call("window", op="resize", w=320, h=300, **w)
+        c.call("window", op="move", x=200, y=sh - 300, **w)
+        frame = window_frame(c, w)
+        c.call("fill", ref=ref, text="narrow", **w)
+        c.call("done", summary="a summary long enough to make the pill far wider than this narrow window")
+        time.sleep(0.6)
+        border, wave = border_and_wave()
+        shot = os.path.join(scratch_dir, "done-pill-narrow-window.png")
+        subprocess.run(["screencapture", "-x", shot])
+        print(f"      narrow: border {border}, wave {wave}, TextEdit {frame}; saved {shot}")
+        check("done: the wide pill inside a narrow window is no wider than the window less 8 px a side",
+              wave is not None and wave[0] >= frame[0] + 7 and wave[0] + wave[2] <= frame[0] + frame[2] - 7, (wave, frame))
+        time.sleep(3.5)
+    finally:
+        close_scratch(c, w, path)
+        c.close()
+        if not had_calc:
+            subprocess.run(["osascript", "-e", 'tell application "Calculator" to quit'], capture_output=True)
         if os.path.exists(path):
             os.remove(path)
 
@@ -2248,7 +2336,7 @@ ONLY = {"protocol": protocol_checks, "settle": settle_checks, "diff": with_clien
         "pill": lambda: fix11_group(borrows=False), "fix12": fix12_group,
         "fix12-idle": lambda: fix12_group(front_eof=False), "fix13": fix13_group,
         "audit": audit_checks, "finder": finder_rename_group, "drag": drag_target_group,
-        "placement": with_client(pill_place_checks)}
+        "placement": with_client(pill_place_checks), "donepill": done_pill_group}
 
 
 if __name__ == "__main__":

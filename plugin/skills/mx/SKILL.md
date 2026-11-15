@@ -153,11 +153,15 @@ forward at once.
   the name and folder you asked for, then click button "Save" (fix them
   first if not). Return needs no confirm in these panels. Don't scroll the
   file list looking for a folder: go to it by path.
-- Finder renames: `fill` on an item renames its file (image "untitled
-  folder" in icon view, or its name textbox's ref in list view), with the
-  full name and extension. Finder's own rename field closes as soon as
-  Finder leaves the front, so don't press return and type. New folder:
-  menu File > New Folder, then fill image "untitled folder" with the name.
+- Items that stand for files, such as Finder's icons and list rows: `fill`
+  on the item renames its file, with the full name and extension. An app's
+  inline rename field can close as soon as the app leaves the front, so use
+  `fill` rather than pressing return and typing. For a new folder, run the
+  app's New Folder menu command, then fill the new item with the name.
+- A popover or inline editor for a new item can treat Escape as cancel and
+  throw the item away. Close it by clicking an empty spot outside it.
+- Check that a create or save stuck before you report it: read the new
+  item back, and say it's done only once it's still there.
 - `scroll(app, ref, direction, amount)` scrolls by pages. Without a
   direction it brings the element into view. `drag(app, from, to)` takes
   refs or `{x, y}` points, such as a window's title bar. For items, pass
@@ -171,24 +175,24 @@ forward at once.
   `keep: true` when the user asked for the text on their clipboard.
   `clipboard get` needs confirm, since it can hold a password.
 
-## Electron apps (Slack and others)
+## Electron and web-based apps
 
-- Electron rows often don't respond to AXPress. mx falls back to a real
-  mouse click, which borrows the front in background mode. Prefer the
-  keyboard path when there is one.
-- Slack opens a conversation from the keyboard, all in the background:
-  fill the sidebar filter (`name: "Channel or user name"`, with the role
-  the snapshot shows), then `key: "down"`, then `key: "return"` on the
-  result row by role and name. Return on the filter box itself does
-  nothing, so aim it at the row. As one batch:
-  `[{"action":"fill","role":"searchbox","name":"Channel or user name","text":"Sam"},`
-  `{"action":"key","role":"searchbox","name":"Channel or user name","key":"down"},`
+- Their rows often don't respond to AXPress. mx falls back to a real mouse
+  click, which borrows the front in background mode. Prefer the keyboard
+  path when there is one.
+- To open an item from the keyboard, all in the background: fill the app's
+  filter or search field, then `key: "down"`, then `key: "return"` on the
+  result row by role and name. Return on the field itself often does
+  nothing, so aim it at the row. As one batch, with the role and name the
+  snapshot shows:
+  `[{"action":"fill","role":"searchbox","name":"Search","text":"Sam"},`
+  `{"action":"key","role":"searchbox","name":"Search","key":"down"},`
   `{"action":"key","role":"row","name":"Sam","key":"return"}]`
   Return on a row or a search box needs no confirm.
-- Slack's message box is a rich text field. If `fill` doesn't take, switch
+- Message boxes are often rich text fields. If `fill` doesn't take, switch
   to `typing: "keys"`. Use `shift+return` for line breaks inside a message.
-- The first touch of an Electron app turns on its accessibility tree, which
-  can take a second or two. The next snapshot is fast.
+- The first touch of one of these apps turns on its accessibility tree,
+  which can take a second or two. The next snapshot is fast.
 
 ## Screenshots
 

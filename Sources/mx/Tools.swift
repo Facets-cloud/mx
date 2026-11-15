@@ -57,11 +57,22 @@ struct Ctx {
     func title(_ roots: [AXUIElement]) -> String { scope == .window ? roots.first.map(windowTitle) ?? "" : "" }
 }
 
+/// A window the border tracks, and the app whose focus it follows (see Overlay.track).
+struct Tracked: Equatable {
+    let id: CGWindowID?
+    let pid: pid_t?
+}
+
 final class Tools {
     private var states: [pid_t: AppState] = [:]
     private var title: String?
     private var started: Double?
-    var actions = 0
+    var actions = 0 { didSet { if actions > oldValue { acted = tracked } } }
+    /// The window the border was last sent to (by context), and the one it was on at the
+    /// session's latest action. Done goes back to the latter, so a read of another app
+    /// after the last action (a check, a snapshot) doesn't take the summary there.
+    private var tracked: Tracked?
+    private var acted: Tracked?
     private var step: String?  // "3/7" while a batch runs
     var mode: Mode = envDefault("MX_MODE", Mode.background)
     private var typing: Typing = envDefault("MX_TYPING", Typing.paste)
@@ -93,7 +104,7 @@ final class Tools {
             return ((args["labels"] as? [String]) ?? []).map { "\($0): \(isDangerous($0) ? "yes" : "no")" }.joined(separator: "\n")
         }
         if name == "_debug_audit" { return debugAudit(args) }
-        // Hidden self-test hook: pillPlacement on plain values, one "id: below|inside x,y" per case.
+        // Hidden self-test hook: pillPlacement on plain values, one "id: below|inside x,y width" per case.
         if name == "_debug_pill" {
             func rect(_ v: Any?) -> CGRect {
                 let n = (v as? [NSNumber])?.map { CGFloat($0.doubleValue) } ?? []
@@ -101,9 +112,9 @@ final class Tools {
             }
             return ((args["cases"] as? [[String: Any]]) ?? []).enumerated().map { i, c in
                 let box = rect([0, 0] + ((c["box"] as? [NSNumber]) ?? [])).size
-                let (o, inside) = pillPlacement(rect(c["frame"]), box: box, visible: rect(c["visible"]),
+                let (r, inside) = pillPlacement(rect(c["frame"]), box: box, visible: rect(c["visible"]),
                                                 inFront: ((c["front"] as? [Any]) ?? []).map(rect))
-                return "\((c["id"] as? NSNumber)?.stringValue ?? String(i + 1)): \(inside ? "inside" : "below") \(Int(o.x)),\(Int(o.y))"
+                return "\((c["id"] as? NSNumber)?.stringValue ?? String(i + 1)): \(inside ? "inside" : "below") \(Int(r.minX)),\(Int(r.minY)) \(Int(r.width))"
             }.joined(separator: "\n")
         }
         pendingImage = nil
@@ -182,6 +193,8 @@ final class Tools {
         let summary = args["summary"] as? String ?? ""
         let secs = started.map { now() - $0 } ?? 0
         let result = String(format: "done in %.1fs with %d action%@", secs, actions, actions == 1 ? "" : "s") + restoreUserClipboard()
+        if let acted, acted != tracked { Overlay.shared.track(acted.id, follow: acted.pid) }
+        tracked = nil; acted = nil
         Overlay.shared.finish("Done: \(summary.isEmpty ? (title ?? "") : summary)", pointer: mode.inFront)
         releaseCursor()
         started = nil; title = nil; actions = 0
@@ -231,8 +244,9 @@ final class Tools {
         audit.app = ctx.name; audit.bundle = app.bundleIdentifier; audit.pid = pid; audit.window = win.map(windowTitle)
         // The border follows the window the call acts on; the system UI has none. Without a
         // window query it also follows the app's focus to a sheet or dialog between calls.
-        Overlay.shared.track(win.flatMap(windowID),
-                             follow: system || ctx.windowQuery?.isEmpty == false ? nil : pid)
+        let t = Tracked(id: win.flatMap(windowID), pid: system || ctx.windowQuery?.isEmpty == false ? nil : pid)
+        tracked = t
+        Overlay.shared.track(t.id, follow: t.pid)
         // Front and watch modes keep the session's app in front, including when it moves to another app.
         if mode.inFront, ctx.regular, !activate(app) {
             throw MXError("could not bring \(app.localizedName ?? "the app") to the front")
