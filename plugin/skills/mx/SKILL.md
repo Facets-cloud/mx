@@ -36,10 +36,12 @@ where the time goes. Once you understand the window, send the plan as one
 at the first failure, and return one diff plus the value of each read step. Use role and name for elements that
 will only appear after an earlier step.
 
-`fill` sets a field's text in one go. Some fields ignore pasted text (chat
-composers, autocompletes). For those, call `start` again with
-`typing: "keys"` and fill again: mx clears the field with select all and
-Delete, then types key by key.
+`fill` sets a field's text in one go and reads it back. If the text didn't
+take, mx types it key by key once, with shift+return for line breaks, and
+the result says "fill didn't take; typed it instead". A click reports the
+path that worked. Rows and web controls that ignore a press get return,
+then a real mouse click. "no visible effect" means nothing changed, so
+snapshot before you try something else.
 
 ## Modes
 
@@ -79,7 +81,9 @@ forward at once.
   ship, deploy, release, publish, leave, place order, schedule and
   checkout, for an unlabeled button next to a message box (often Send), for
   cmd+delete and cmd+option+delete in Finder, for closing a window with unsaved changes, and for reading the
-  clipboard.
+  clipboard. Escape is refused while focus is in a field you filled, or in
+  a popover or sheet that holds one, because it can throw the edit away.
+  When an Escape does remove text you entered, the result says so.
 - System Settings: reading any pane is fine. Changes in Privacy &
   Security, Users & Groups, Passwords, Login Items, Sharing, Lock Screen,
   Touch ID & Password, Device Management and Transfer or Reset need
@@ -158,8 +162,6 @@ forward at once.
   inline rename field can close as soon as the app leaves the front, so use
   `fill` rather than pressing return and typing. For a new folder, run the
   app's New Folder menu command, then fill the new item with the name.
-- A popover or inline editor for a new item can treat Escape as cancel and
-  throw the item away. Close it by clicking an empty spot outside it.
 - Check that a create or save stuck before you report it: read the new
   item back, and say it's done only once it's still there.
 - `scroll(app, ref, direction, amount)` scrolls by pages. Without a
@@ -177,22 +179,8 @@ forward at once.
 
 ## Electron and web-based apps
 
-- Their rows often don't respond to AXPress. mx falls back to a real mouse
-  click, which borrows the front in background mode. Prefer the keyboard
-  path when there is one.
-- To open an item from the keyboard, all in the background: fill the app's
-  filter or search field, then `key: "down"`, then `key: "return"` on the
-  result row by role and name. Return on the field itself often does
-  nothing, so aim it at the row. As one batch, with the role and name the
-  snapshot shows:
-  `[{"action":"fill","role":"searchbox","name":"Search","text":"Sam"},`
-  `{"action":"key","role":"searchbox","name":"Search","key":"down"},`
-  `{"action":"key","role":"row","name":"Sam","key":"return"}]`
-  Return on a row or a search box needs no confirm.
-- Message boxes are often rich text fields. If `fill` doesn't take, switch
-  to `typing: "keys"`. Use `shift+return` for line breaks inside a message.
-- The first touch of one of these apps turns on its accessibility tree,
-  which can take a second or two. The next snapshot is fast.
+The first touch of one of these apps turns on its accessibility tree,
+which can take a second or two. The next snapshot is fast.
 
 ## Screenshots
 
