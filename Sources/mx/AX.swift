@@ -38,7 +38,7 @@ private let terminalWords = ["terminal", "iterm", "ghostty", "warp", "kitty", "a
 func blockReason(name: String, bundle: String?) -> String? {
     let n = name.lowercased()
     if terminalBundles.contains(bundle ?? "") || terminalWords.contains(where: n.contains) {
-        return "it is a terminal: typing there would run shell commands outside Claude's permission system. Use the agent's own shell tool instead"
+        return "it is a terminal: typing there would run shell commands outside the agent's permission system. Use the agent's own shell tool instead"
     }
     if passwordBundles.contains(bundle ?? "") || passwordWords.contains(where: n.contains) {
         return "it holds passwords (Keychain Access and password managers are blocked)"
