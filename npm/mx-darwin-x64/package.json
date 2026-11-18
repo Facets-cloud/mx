@@ -1,6 +1,6 @@
 {
   "name": "@facets-cloud/mx-darwin-x64",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "The mx binary for macOS x64. Install @facets-cloud/mx instead.",
   "license": "MIT",
   "author": "Facets Cloud",
