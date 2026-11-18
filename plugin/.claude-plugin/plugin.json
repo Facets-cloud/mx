@@ -1,7 +1,7 @@
 {
   "name": "mx",
   "version": "0.1.2",
-  "description": "Drive Mac apps (Slack, Mail, Notes, Finder, any native or Electron app) and the rest of the Mac through the accessibility API, in the background or in front of you.",
+  "description": "Drive any Mac app, native or Electron, plus menus, Control Center, the Dock and System Settings, through the accessibility API, in the background or in front of you.",
   "author": {
     "name": "Facets Cloud"
   },

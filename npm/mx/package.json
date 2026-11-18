@@ -1,7 +1,7 @@
 {
   "name": "@facets-cloud/mx",
   "version": "0.1.2",
-  "description": "Let coding agents drive your Mac's apps through the accessibility API, in the background or in front of you. An MCP server for Claude, Codex and Cursor.",
+  "description": "Let coding agents drive any Mac app, native or Electron, plus menus, Control Center, the Dock and System Settings, through the accessibility API, in the background or in front of you. An MCP server for Claude, Codex and Cursor.",
   "license": "MIT",
   "author": "Facets Cloud",
   "homepage": "https://github.com/Facets-cloud/mx",

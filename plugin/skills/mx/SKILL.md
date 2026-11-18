@@ -1,6 +1,6 @@
 ---
 name: mx
-description: Drive the user's Mac (Slack, Mail, Notes, Finder, any native or Electron app, plus menus, windows, Control Center, the Dock, System Settings and the menu bar) through the macOS accessibility API with the mx tools. Use when a task means doing something on the Mac, such as in an app, changing brightness or volume, or opening a settings pane, or the user says "on my Mac", "in the Slack app", "in Notes", or "mx".
+description: Drive the user's Mac (any native or Electron app, plus menus, windows, Control Center, the Dock, System Settings and the menu bar) through the macOS accessibility API with the mx tools. Use when a task means doing something on the Mac, such as in an app, changing brightness or volume, or opening a settings pane, or the user says "on my Mac", names an app ("in the <app> app", "in Notes"), or says "mx".
 ---
 
 # mx

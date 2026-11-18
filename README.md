@@ -5,9 +5,9 @@
 Like `docker exec`, but the container is your Mac. mx lets coding agents
 (Claude Code, Codex, Cursor, Claude Desktop) run their steps inside the Mac
 apps you already have open and signed in to, through the macOS accessibility
-API. It reaches the whole Mac, not just one app: Slack, Mail, Notes, Finder,
-any native or Electron app, plus menus, windows, Control Center, the Dock,
-System Settings and dialogs. It works in the background by default, so you
+API. It reaches the whole Mac, not just one app: any native or Electron
+app, plus menus, windows, Control Center, the Dock, System Settings and
+dialogs. It works in the background by default, so you
 keep typing in your own app while the agent works in another.
 
 See it run: **https://facets-cloud.github.io/mx/** has the demo video and six
