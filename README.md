@@ -32,6 +32,17 @@ batch     app=system  read slider "display brightness", fill "100%", read
 done      "Brightness was 62%, now 100%"
 ```
 
+## Before you start
+
+- **macOS 14 or later.**
+- **Accessibility**, for the app that runs mx: your terminal, editor,
+  Claude Desktop, Cursor or other agent app. Every tool except
+  `list_apps`, `start` and `done` needs it.
+- **Screen Recording** for the same app, only if you want `screenshot`.
+
+Turn them on in System Settings > Privacy & Security and restart that app.
+`mx doctor` names the app. [Details](#permissions).
+
 ## How it works
 
 The agent snapshots an app and gets one line per control, each with a ref:
