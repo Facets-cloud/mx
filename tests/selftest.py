@@ -1171,7 +1171,9 @@ def textedit_system_checks(c, ref, w, path):
     text, is_err = c.call("menu", path=["File", "Export as PDF"], **sw)
     check("menu with an ellipsis title opens the save sheet", not is_err and "sheet" in text, text)
     text, is_err = c.call("snapshot", scope="windows", **w)
-    m = re.search(r'(e\d+) textbox = "', text)
+    # The sheet's name field by its name: the first textbox can be a file in the browser,
+    # and filling that renames the user's file.
+    m = re.search(r'(e\d+) textbox "Save As:"', text)
     check("scope windows shows the sheet with its Cancel button and name field",
           not is_err and "sheet" in text and 'button "Cancel"' in text and m, text)
     if m:
