@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>mx · mac exec</title>
-<meta name="description" content="mx is mac exec: an MCP server that runs your coding agent's steps inside the Mac apps you already have open and signed in to, in the background while you keep working, or in front of you.">
+<meta name="description" content="mx is mac exec: a Mac CLI and MCP server that runs your coding agent's steps inside the Mac apps you already have open and signed in to, in the background while you keep working, or in front of you.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -87,6 +87,16 @@
   .installer pre.prompt { white-space: pre-wrap; max-height: 168px; overflow-y: auto; color: #cfcfca; scrollbar-width: thin; }
   .installer .btn { background: #222226; color: #f1f1ef; border-color: #2e2e33; }
   .installer .hint { padding: 0 18px 12px; font-size: 13px; color: #77776f; }
+  /* Two kinds of user: terminal agents get tabs, Claude Desktop gets a file and steps */
+  .installer .groups { display: flex; gap: 6px; padding: 10px 10px 4px; }
+  .installer .groups button { flex: none; font: 600 13px "Inter Tight", sans-serif; color: #a0a09a; background: none; border: 1px solid #2e2e33; border-radius: 99px; padding: 5px 13px; cursor: pointer; }
+  .installer .groups button[aria-pressed="true"] { color: #121212; background: #f1f1ef; border-color: #f1f1ef; }
+  .installer .mcpb { padding: 14px 18px 16px; font-size: 14px; color: #cfcfca; }
+  .installer .mcpb ol { margin: 12px 0 0 18px; display: grid; gap: 6px; }
+  .installer .mcpb b { color: #f1f1ef; font-weight: 600; }
+  .installer .mcpb p { margin-top: 10px; font-size: 13px; color: #77776f; }
+  .installer [hidden] { display: none; }
+  .installer .mcpb .btn { background: #f1f1ef; color: #121212; border-color: #f1f1ef; }
 
   /* Horizontal scrollers (install tabs, commands, code): fade the edge that has more beyond it */
   @property --fade-start { syntax: "<length>"; inherits: false; initial-value: 0px; }
@@ -310,7 +320,7 @@
 <header class="hero">
   <div class="wrap">
     <div>
-      <span class="eyebrow"><i></i>MCP server · v0.1 · macOS 14+</span>
+      <span class="eyebrow"><i></i>CLI and MCP · v0.1 · macOS 14+</span>
       <div><div class="word" id="word"><span class="box" aria-label="mx: mac exec"><span class="k">m</span><span class="rest">ac</span><span class="gap"></span><span class="rest">e</span><span class="k">x</span><span class="rest">ec</span></span><span class="pill"><span class="spin"></span>mx · for the whole Mac</span></div></div>
       <h1>Your agent uses the apps on your Mac. You keep using yours.</h1>
       <p class="lede">mx gives Claude Code, Codex and Cursor the Mac's accessibility tree: any native or Electron app, plus menus, Control Center, the Dock and System Settings. It works in the background by default, and in front of you when you ask.</p>
@@ -407,8 +417,8 @@ title: Sam (DM) - Slack
     </div>
 
     <div class="chain">
-      <div class="node"><h4>Your agent</h4><p>calls mx as an MCP server</p><div class="chips"><span>Claude Code</span><span>Codex</span><span>Cursor</span><span>Claude Desktop</span></div></div>
-      <div class="arrow">MCP · stdio</div>
+      <div class="node"><h4>Your agent</h4><p>runs mx commands, or calls it over MCP</p><div class="chips"><span>Claude Code</span><span>Codex</span><span>Cursor</span><span>Claude Desktop</span></div></div>
+      <div class="arrow">CLI or MCP</div>
       <div class="node mid"><h4>mx</h4><p>one Swift binary. Borrows the front only for a real mouse click or a cmd shortcut, then hands it back.</p></div>
       <div class="arrow">accessibility API</div>
       <div class="node"><h4>Your Mac</h4><p>the apps you have open, signed in</p><div class="chips"><span>any app</span><span>Control Center</span><span>menus</span><span>Dock</span><span>Settings</span></div></div>
@@ -483,7 +493,7 @@ title: Sam (DM) - Slack
           <tr><td><code>MX_MODE</code></td><td><code>background</code> (default), <code>front</code> or <code>watch</code>.</td></tr>
           <tr><td><code>MX_TYPING</code></td><td><code>paste</code> (default) puts text in at once. <code>keys</code> types key by key, for chat boxes and autocompletes that ignore pasted text.</td></tr>
         </table>
-        <p>Set these where your agent starts mx, then restart the agent. What the agent passes to <code>start</code> wins.</p>
+        <p>Set these in the environment your agent runs mx in, then restart the agent. What the agent passes to <code>start</code> wins.</p>
       </div>
       <div class="installer" data-set="modes"></div>
     </div>
@@ -529,9 +539,9 @@ resume: claude --resume 5e0c1a7b-2f4d-4c8e-9b61-0d3f7a2e8c45</span>
     <div class="kicker">// setup</div>
     <h2>Three steps, once.</h2>
     <div class="steps">
-      <div class="step"><h3>Add the server</h3><p>Claude Code: the plugin at the top, which adds the mx skill too. Codex, Cursor and Claude Desktop: the <code>npx -y @facets-cloud/mx</code> server entry.</p></div>
+      <div class="step"><h3>Install mx</h3><p>Claude Code: the plugin at the top, which puts the mx CLI on its PATH and adds the skill. Codex, Cursor and other agents: <code>install.sh</code>, then an MCP entry with the command <code>mx</code>. Claude Desktop: download <a href="https://github.com/Facets-cloud/mx/releases/latest/download/mx.mcpb">mx.mcpb</a> and double-click it.</p></div>
       <div class="step"><h3>Grant Accessibility</h3><p>macOS gives it to the app that starts mx: your terminal, editor, Claude Desktop or Cursor. System Settings > Privacy &amp; Security > Accessibility. Add Screen Recording for screenshots.</p></div>
-      <div class="step"><h3>Check it</h3><p>Run <code>npx -y @facets-cloud/mx doctor</code>, or ask the agent to. It names the app to turn on and what's missing, then restart that app.</p></div>
+      <div class="step"><h3>Check it</h3><p>Run <code>mx doctor</code>, or ask the agent to. It names the app to turn on and what's missing, then restart that app. In Claude Desktop, ask Claude to take a snapshot of Finder.</p></div>
     </div>
   </section>
 
@@ -569,14 +579,14 @@ resume: claude --resume 5e0c1a7b-2f4d-4c8e-9b61-0d3f7a2e8c45</span>
       <details><summary>Will it take over my mouse and keyboard?</summary><p>Not in background mode. Presses, fills and plain keys go to the app directly. A real mouse click or a cmd shortcut borrows the front for 200 to 400 ms and puts your app and cursor back, and mx waits until you pause typing first. Front and watch modes take the front because you asked to see it.</p></details>
       <details><summary>Which app do I grant Accessibility to?</summary><p>The one that starts mx: your terminal for Claude Code or Codex, or Claude Desktop or Cursor. <code>mx doctor</code> names it. Restart that app after granting.</p></details>
       <details><summary>Does it send my data anywhere?</summary><p>No. mx answers your agent on stdio and makes no network calls. What the agent reads goes to your agent's model, the same as anything else it reads.</p></details>
-      <details><summary>Does it work on Intel Macs?</summary><p>Yes. npm installs the arm64 or x64 build to match your Mac. macOS 14 or later.</p></details>
+      <details><summary>Does it work on Intel Macs?</summary><p>Yes. <code>install.sh</code> and the Claude Code plugin pick the arm64 or x64 build to match your Mac. macOS 14 or later.</p></details>
       <details><summary>What can't it do?</summary><p>It can't unlock the Mac or answer permission prompts, it won't type into password fields, and screenshots need the window on the current Space. The binary isn't signed or notarized yet.</p></details>
     </div>
   </section>
 
   <div class="end">
     <div class="big">mx</div>
-    <p>mac exec, for the whole Mac. One command to add it, or paste one prompt into your agent and let it set mx up.</p>
+    <p>mac exec, for the whole Mac. One command to add it, a file to double-click in Claude Desktop, or a prompt your agent follows.</p>
     <div class="installer center"></div>
   </div>
 
@@ -601,32 +611,48 @@ resume: claude --resume 5e0c1a7b-2f4d-4c8e-9b61-0d3f7a2e8c45</span>
   setTheme(THEMES.includes(saved) ? saved : "auto");
   themeBtn.addEventListener("click", () => setTheme(THEMES[(THEMES.indexOf(themeBtn.textContent) + 1) % 3]));
 
-  // Install tabs: a command per client, or a prompt any agent can follow
-  const PROMPT = `Install mx (mac exec, npm package @facets-cloud/mx) for me. It's an MCP server that lets you drive the apps on my Mac through the accessibility API.
+  // Installer: terminal agents get a tab per agent plus a prompt; Claude Desktop gets mx.mcpb and steps
+  const INSTALL_SH = "curl -fsSL https://facets-cloud.github.io/mx/install.sh | sh";
+  const MCPB = "https://github.com/Facets-cloud/mx/releases/latest/download/mx.mcpb";
+  const PROMPT = `Set up mx (mac exec) for me. It's a macOS command-line tool that lets you drive the apps on my Mac through the accessibility API. It doesn't need Node.
 
-1. Add it for the app you're running in:
-   - Claude Code: claude plugin marketplace add Facets-cloud/mx, then claude plugin install mx@mx (or, server only: claude mcp add -s user mx -- npx -y @facets-cloud/mx)
-   - Codex: add [mcp_servers.mx] with command = "npx" and args = ["-y", "@facets-cloud/mx"] to ~/.codex/config.toml
-   - Claude Desktop or Cursor: add {"mx": {"command": "npx", "args": ["-y", "@facets-cloud/mx"]}} under mcpServers in its MCP config
-2. Run npx -y @facets-cloud/mx doctor. Tell me which app it names, and to turn it on in System Settings > Privacy & Security > Accessibility, plus Screen & System Audio Recording if I want screenshots.
+1. Install it for the agent you are:
+   - Claude Code: run claude plugin marketplace add Facets-cloud/mx, then claude plugin install mx@mx. The plugin puts mx on your PATH after a restart and teaches you its commands.
+   - Any other agent that runs shell commands (Codex, Cursor, Gemini CLI and the rest): run ${INSTALL_SH}. It installs mx into ~/.local/bin and prints the path. Then add an MCP server named mx with that full path as the command and no arguments. Codex: codex mcp add mx -- ~/.local/bin/mx. Cursor: "mx": {"command": "<the full path>"} under mcpServers in ~/.cursor/mcp.json.
+   - If you can't run commands here, as in Claude Desktop, install nothing. Send me to https://facets-cloud.github.io/mx/#setup for the mx.mcpb file.
+2. Run mx doctor (or ~/.local/bin/mx doctor). In Claude Code, mx arrives with the restart in step 4, so run it then. Tell me which app doctor names, and to turn it on in System Settings > Privacy & Security > Accessibility, plus Screen & System Audio Recording if I want screenshots.
 3. Tell me mx works in the background by default, and that I can say "show me" or "let me watch" to see a job in front of me.
-4. Tell me to restart this app, then run doctor again and explain what it reports.`;
+4. Tell me to restart this app, then run mx doctor again and explain what it reports.`;
   const TABS = [
-    ["Claude Code plugin", "claude plugin marketplace add Facets-cloud/mx\nclaude plugin install mx@mx", "Adds the server and the mx skill. Then grant Accessibility and restart."],
-    ["Claude Code", "claude mcp add -s user mx -- npx -y @facets-cloud/mx", "Server only. Then grant Accessibility to your terminal and restart."],
-    ["Codex", '[mcp_servers.mx]\ncommand = "npx"\nargs = ["-y", "@facets-cloud/mx"]', "In ~/.codex/config.toml. Then grant Accessibility to your terminal."],
-    ["Cursor / Desktop", '{ "mcpServers": { "mx": { "command": "npx", "args": ["-y", "@facets-cloud/mx"] } } }', "In ~/.cursor/mcp.json or claude_desktop_config.json. Grant Accessibility to that app."],
-    ["Ask your agent", PROMPT, "Paste this into any agent. It installs mx and walks you through the rest."],
+    ["Claude Code plugin", "claude plugin marketplace add Facets-cloud/mx\nclaude plugin install mx@mx", "Puts the mx CLI on Claude Code's PATH and adds the mx skill. No Node. Then grant Accessibility to your terminal and restart."],
+    ["Codex", INSTALL_SH + "\ncodex mcp add mx -- ~/.local/bin/mx", "install.sh puts mx in ~/.local/bin and runs mx doctor. Then grant Accessibility to your terminal and restart Codex."],
+    ["Cursor / other agents", INSTALL_SH + '\n\n{ "mcpServers": { "mx": { "command": "mx" } } }', "Then add the entry to ~/.cursor/mcp.json or your agent's MCP config. If it can't find mx, use the full path install.sh prints."],
+    ["Ask your agent", PROMPT, "Paste this into any terminal agent. It installs mx and walks you through the rest."],
   ];
+  const DESKTOP = `<a class="btn" href="${MCPB}">Download mx.mcpb</a>
+    <ol>
+      <li>Double-click <b>mx.mcpb</b>, or add it in Claude's Settings &gt; Extensions &gt; Install Extension. It isn't notarized yet, so Claude may show it as unsigned.</li>
+      <li>Turn on <b>Accessibility</b> for Claude in System Settings &gt; Privacy &amp; Security, and <b>Screen Recording</b> if you want screenshots.</li>
+      <li>Quit and reopen Claude, then ask it to take a snapshot of Finder.</li>
+    </ol>
+    <p>For the Chat tab. Cowork isn't supported yet. No terminal and no Node.</p>`;
   const MODE_TABS = [
-    ["Claude Code", "claude mcp remove mx -s user\nclaude mcp add -s user mx -e MX_MODE=front -- npx -y @facets-cloud/mx", "Swap or add -e MX_TYPING=keys. Restart Claude Code after."],
-    ["Codex", '[mcp_servers.mx]\ncommand = "npx"\nargs = ["-y", "@facets-cloud/mx"]\nenv = { MX_MODE = "front" }', "In ~/.codex/config.toml. Restart Codex after."],
-    ["Cursor / Desktop", '{ "mcpServers": { "mx": {\n  "command": "npx", "args": ["-y", "@facets-cloud/mx"],\n  "env": { "MX_MODE": "front" } } } }', "The mx entry in ~/.cursor/mcp.json or claude_desktop_config.json."],
+    ["Claude Code", '// ~/.claude/settings.json\n{ "env": { "MX_MODE": "front" } }', 'Claude Code passes its env to the mx it runs. Add "MX_TYPING": "keys" the same way. Restart Claude Code after.'],
+    ["Codex", '[mcp_servers.mx]\ncommand = "mx"\nenv = { MX_MODE = "front" }', "In ~/.codex/config.toml, on the mx entry. Restart Codex after."],
+    ["Cursor / other agents", '{ "mcpServers": { "mx": {\n  "command": "mx",\n  "env": { "MX_MODE": "front" } } } }', "The mx entry in ~/.cursor/mcp.json or your agent's MCP config."],
+    ["Claude Desktop", '# no setting yet\n# say "show me" or "let me watch" in the chat', "The mx.mcpb extension has no settings yet. What you ask for picks the mode."],
   ];
   document.querySelectorAll(".installer").forEach((box) => {
-    const set = box.dataset.set === "modes" ? MODE_TABS : TABS, ask = set === TABS ? 4 : -1;
-    box.innerHTML = '<div class="tabs" role="tablist"></div><div class="body"><pre></pre><button class="btn" type="button">Copy</button></div><div class="hint"></div>';
-    const [tabs, pre, btn, hint] = [box.querySelector(".tabs"), box.querySelector("pre"), box.querySelector(".btn"), box.querySelector(".hint")];
+    const modes = box.dataset.set === "modes", set = modes ? MODE_TABS : TABS, ask = modes ? -1 : 3;
+    box.innerHTML = (modes ? "" : '<div class="groups"><button type="button" aria-pressed="true">Terminal agents</button><button type="button" aria-pressed="false">Claude Desktop</button></div>') +
+      '<div class="tabs" role="tablist"></div><div class="body"><pre></pre><button class="btn" type="button">Copy</button></div><div class="hint"></div>' +
+      (modes ? "" : '<div class="mcpb" hidden>' + DESKTOP + "</div>");
+    const [tabs, body, pre, btn, hint, mcpb] = [".tabs", ".body", "pre", ".body .btn", ".hint", ".mcpb"].map((s) => box.querySelector(s));
+    box.querySelectorAll(".groups button").forEach((g, gi) => g.addEventListener("click", () => {
+      box.querySelectorAll(".groups button").forEach((b, j) => b.setAttribute("aria-pressed", String(gi === j)));
+      [tabs, body, hint].forEach((el) => (el.hidden = gi === 1));
+      mcpb.hidden = gi === 0;
+    }));
     const show = (i) => {
       tabs.querySelectorAll("button").forEach((b, j) => b.setAttribute("aria-selected", String(i === j)));
       pre.textContent = set[i][1];
