@@ -11,3 +11,8 @@ jobs:
       - run: swift build -c release
       # The groups that need no Accessibility grant and no GUI.
       - run: python3 tests/selftest.py --only protocol,gate,settle,diff
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Desktop extension tests
+        run: node --test 'packaging/mcpb/*.test.mjs'
