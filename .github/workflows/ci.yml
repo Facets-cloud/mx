@@ -11,3 +11,5 @@ jobs:
       - run: swift build -c release
       # The groups that need no Accessibility grant and no GUI.
       - run: python3 tests/selftest.py --only protocol,gate,settle,diff
+      # The CLI and its background process (mx serve); no Accessibility grant needed.
+      - run: python3 tests/clitest.py --only protocol
