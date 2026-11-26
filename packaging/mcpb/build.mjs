@@ -38,6 +38,7 @@ export function manifest(version) {
     support: "https://github.com/Facets-cloud/mx/issues",
     repository: { type: "git", url: "https://github.com/Facets-cloud/mx" },
     license: "MIT",
+    icon: "icon.png",
     keywords: ["mac", "macos", "accessibility", "automation", "apps"],
     server: {
       type: "binary",
@@ -57,6 +58,7 @@ export function build(version, binary, outDir) {
     copyFileSync(binary, join(stage, "server", "mx"));
     chmodSync(join(stage, "server", "mx"), 0o755);
     for (const f of ["LICENSE", "THIRD_PARTY_NOTICES"]) copyFileSync(join(root, f), join(stage, f));
+    copyFileSync(join(root, "packaging", "mcpb", "icon.png"), join(stage, "icon.png"));
     writeFileSync(join(stage, "manifest.json"), JSON.stringify(manifest(v), null, 2) + "\n");
 
     mkdirSync(outDir, { recursive: true });

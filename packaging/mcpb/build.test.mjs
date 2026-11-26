@@ -58,6 +58,7 @@ test("the manifest runs mx with no arguments from the bundled binary, on macOS o
   assert.equal(m.server.entry_point, "server/mx");
   assert.deepEqual(m.server.mcp_config, { command: "${__dirname}/server/mx", args: [] });
   assert.deepEqual(m.compatibility, { platforms: ["darwin"] });
+  assert.equal(m.icon, "icon.png");
 });
 
 test("carries mx and the legal files, mx kept executable, no directory entries", () => {
@@ -71,7 +72,7 @@ test("carries mx and the legal files, mx kept executable, no directory entries",
   );
   assert.equal(modes["server/mx"], "-rwxr-xr-x");
   // No directory entries: mcpb's unpacker writes every entry as a file.
-  assert.deepEqual(Object.keys(modes).sort(), ["LICENSE", "THIRD_PARTY_NOTICES", "manifest.json", "server/mx"]);
+  assert.deepEqual(Object.keys(modes).sort(), ["LICENSE", "THIRD_PARTY_NOTICES", "icon.png", "manifest.json", "server/mx"]);
 });
 
 test("the unzipped command runs the bundled binary", () => {
