@@ -36,8 +36,8 @@ done      "Brightness was 62%, now 100%"
 
 - **macOS 14 or later.**
 - **Accessibility**, for the app that runs mx: your terminal, editor,
-  Claude Desktop, Cursor or other agent app. Every tool except
-  `list_apps`, `start` and `done` needs it.
+  Cursor or other agent app. With mx.mcpb in Claude Desktop, it goes to mx
+  itself. Every tool except `list_apps`, `start` and `done` needs it.
 - **Screen Recording** for the same app, only if you want `screenshot`.
 
 Turn them on in System Settings > Privacy & Security and restart that app.
@@ -163,9 +163,16 @@ You chat in the Claude app and don't use a terminal.
    and double-click it, or add it in Claude's Settings > Extensions >
    Install Extension. It isn't notarized yet, so Claude may show it as
    unsigned.
-2. Turn on Accessibility for Claude in System Settings > Privacy &
-   Security, and Screen Recording if you want screenshots.
-3. Quit and reopen Claude, then ask it to take a snapshot of Finder.
+2. Ask Claude to take a snapshot of Finder. Claude Desktop runs mx as its
+   own app, so Accessibility goes to mx itself, not Claude, and mx's error
+   names the file to add. In System Settings > Privacy & Security >
+   Accessibility, click +, press Cmd+Shift+G, paste that path and turn mx
+   on. Do the same under Screen & System Audio Recording if you want
+   screenshots.
+3. Quit Claude with Cmd+Q, reopen it and ask again.
+
+Releases sign mx with the same certificate every time, so the grant
+carries over when you install a newer mx.mcpb.
 
 This is for the Chat tab. Cowork isn't supported yet.
 
@@ -200,8 +207,9 @@ it, restart that app, and run it again.
 ### Permissions
 
 macOS gives these to the app that launched mx, not to mx itself. That is
-your terminal (Terminal, iTerm, Ghostty and so on), your editor, or Claude
-Desktop or Cursor.
+your terminal (Terminal, iTerm, Ghostty and so on), your editor, or Cursor.
+Claude Desktop is the exception: it runs mx.mcpb's mx as its own app, so
+the grants go to that mx binary, and mx names its path.
 
 - **Accessibility** is required by every tool except `list_apps`, `start`
   and `done`.
