@@ -56,7 +56,8 @@ test("the manifest runs mx with no arguments from the bundled binary, on macOS o
   assert.equal(m.license, "MIT");
   assert.equal(m.server.type, "binary");
   assert.equal(m.server.entry_point, "server/mx");
-  assert.deepEqual(m.server.mcp_config, { command: "${__dirname}/server/mx", args: [] });
+  assert.deepEqual(m.server.mcp_config, { command: "${__dirname}/server/mx", args: [], env: { MX_MCPB: "1" } });
+  assert.match(m.long_description, /mx itself, not Claude/);
   assert.deepEqual(m.compatibility, { platforms: ["darwin"] });
 });
 

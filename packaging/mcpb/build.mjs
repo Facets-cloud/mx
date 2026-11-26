@@ -31,7 +31,7 @@ export function manifest(version) {
     description: plugin.description,
     long_description:
       "mx lets Claude run its steps inside the Mac apps you already have open and signed in to, through the macOS accessibility API. It works in the background by default, sends nothing over the network and has no telemetry.\n\n" +
-      "**Before you start:** mx needs macOS 14 or later. In System Settings > Privacy & Security, turn on **Accessibility** for Claude (every tool except `list_apps`, `start` and `done` needs it), and **Screen Recording** too if you want screenshots. Then restart Claude.",
+      "**Before you start:** mx needs macOS 14 or later. Claude Desktop runs mx as its own app, so in System Settings > Privacy & Security give **Accessibility** to mx itself, not Claude (every tool except `list_apps`, `start` and `done` needs it), and **Screen Recording** too if you want screenshots. mx names the file to add when it lacks a permission. Then quit Claude with Cmd+Q and reopen it.",
     author: { name: "Facets Cloud", url: "https://github.com/Facets-cloud" },
     homepage: "https://facets-cloud.github.io/mx/",
     documentation: "https://github.com/Facets-cloud/mx#readme",
@@ -42,7 +42,9 @@ export function manifest(version) {
     server: {
       type: "binary",
       entry_point: "server/mx",
-      mcp_config: { command: "${__dirname}/server/mx", args: [] },
+      // MX_MCPB=1 tells mx it runs inside the bundle, where a missing permission
+      // goes to mx itself, so its errors name its own path (grantSteps in Tools.swift).
+      mcp_config: { command: "${__dirname}/server/mx", args: [], env: { MX_MCPB: "1" } },
     },
     compatibility: { platforms: ["darwin"] },
   };
