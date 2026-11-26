@@ -64,8 +64,7 @@ extension Tools {
 
 func screenRecordingError() -> MXError {
     MXError("mx is not allowed to record the screen, so it cannot take screenshots (the other tools still work). " +
-        "Open System Settings > Privacy & Security > Screen & System Audio Recording and turn on \(responsibleApp()), " +
-        "then restart it and try again.")
+        grantSteps("Screen & System Audio Recording"))
 }
 
 /// The capture's answer, handed from the Task to the waiting thread. Locked, because a

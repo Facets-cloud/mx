@@ -16,6 +16,7 @@ background mx process per agent session, which keeps refs, session and mode
 between calls; `mx stop` ends it. Exit codes: 0 done, 1 the tool failed,
 2 bad flags (the error names the valid ones), 3 refused by a safety gate.
 Without a shell (Claude Desktop), use the MCP tools of the same names.
+There, permissions go to mx itself, not Claude.
 
 ## Workflow
 
@@ -219,9 +220,9 @@ macOS grants Accessibility (needed by every tool except `list_apps`) and
 Screen Recording (needed by `screenshot`) to the app that launched your
 agent, usually the terminal (Terminal, iTerm, Ghostty) or the editor.
 `mx doctor` says what is granted and which app to turn on. When a tool says
-a permission is missing, tell the user which app to turn on in System
-Settings > Privacy & Security, and that they need to restart it. Don't
-retry in a loop. The other tools keep working without Screen Recording.
+a permission is missing, pass its steps on to the user (they name the app
+or file to turn on). Don't retry in a loop. The other tools keep working
+without Screen Recording.
 
 ## Errors
 

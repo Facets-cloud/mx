@@ -60,6 +60,19 @@ Trade-offs:
 
 - **Claude Desktop, Chat tab:** `mx.mcpb`, the Desktop Extension. It runs
   the MCP server from the native binary, no Node.
+  Accessibility and Screen Recording go to that binary, not to Claude.
+  Claude Desktop starts extension servers through
+  `Claude.app/Contents/Helpers/disclaimer`, which disclaims responsibility
+  for the child, so macOS checks mx and ignores Claude's grants. The
+  manifest sets `MX_MCPB=1`, and with it mx's permission errors and
+  `mx doctor` name mx's own path and the steps to add it. Releases sign the
+  binary with the self-signed "mx" identity (`scripts/sign-macos.sh`, after
+  `lipo`, so both slices), which makes its designated requirement
+  `identifier "cloud.facets.mx" and certificate root = H"<sha1>"`, the same
+  for every release, so a grant survives updates. Signed ad hoc, the
+  requirement is the code hash and the grant lapses on each update. The
+  CLI tarballs and npm binaries stay as they were: there the terminal or
+  agent app holds the grant, so the binary's signature doesn't matter.
 - **Cowork:** not supported. Cowork refuses a plugin with a top-level `bin/`.
 - **Codex** loads the same plugin folder. `.codex-plugin/plugin.json` points
   `mcpServers` at `codex-mcp.json`, which still runs

@@ -13,7 +13,11 @@ func doctor() -> Int32 {
     uname(&arch)
     let machine = withUnsafeBytes(of: arch.machine) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
     print("mx \(mxVersion), macOS \(os.majorVersion).\(os.minorVersion).\(os.patchVersion) (\(machine))")
-    print("permissions go to: \(responsibleApp())")
+    if let mx = bundledSelf() {
+        print("permissions go to: mx itself, \(mx) (Claude Desktop runs it as its own app)")
+    } else {
+        print("permissions go to: \(responsibleApp())")
+    }
 
     let ax = env["MX_FORCE_UNTRUSTED"] != "1" && AXIsProcessTrusted()
     let screen = env["MX_FORCE_NO_SCREEN"] != "1" && CGPreflightScreenCaptureAccess()

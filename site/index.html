@@ -325,7 +325,7 @@
       <h1>Your agent uses the apps on your Mac. You keep using yours.</h1>
       <p class="lede">mx gives Claude Code, Codex and Cursor the Mac's accessibility tree: any native or Electron app, plus menus, Control Center, the Dock and System Settings. It works in the background by default, and in front of you when you ask.</p>
       <div class="installer"></div>
-      <p class="needs">Needs macOS 14 or later, and Accessibility for the app that runs mx (your terminal, editor, Claude Desktop or Cursor). Screen Recording too, for screenshots. <a href="#setup">Setup</a></p>
+      <p class="needs">Needs macOS 14 or later, and Accessibility for the app that runs mx (your terminal, editor or Cursor; in Claude Desktop, mx itself). Screen Recording too, for screenshots. <a href="#setup">Setup</a></p>
       <div class="ctas"><a class="btn primary" href="#runs">See it run</a><a class="btn" href="#setup">Setup in 3 steps</a><span>MIT · no telemetry · one Swift binary</span></div>
       <a class="badge" href="https://scuffmark.facets.cloud/c/mx"><img src="https://scuffmark.facets.cloud/badge/mx.svg" alt="scuffmark: mx" height="20"></a>
     </div>
@@ -540,7 +540,7 @@ resume: claude --resume 5e0c1a7b-2f4d-4c8e-9b61-0d3f7a2e8c45</span>
     <h2>Three steps, once.</h2>
     <div class="steps">
       <div class="step"><h3>Install mx</h3><p>Claude Code: the plugin at the top, which puts the mx CLI on its PATH and adds the skill. Codex, Cursor and other agents: <code>install.sh</code>, then an MCP entry with the command <code>mx</code>. Claude Desktop: download <a href="https://github.com/Facets-cloud/mx/releases/latest/download/mx.mcpb">mx.mcpb</a> and double-click it.</p></div>
-      <div class="step"><h3>Grant Accessibility</h3><p>macOS gives it to the app that starts mx: your terminal, editor, Claude Desktop or Cursor. System Settings > Privacy &amp; Security > Accessibility. Add Screen Recording for screenshots.</p></div>
+      <div class="step"><h3>Grant Accessibility</h3><p>macOS gives it to the app that starts mx: your terminal, editor or Cursor. Claude Desktop runs mx as its own app, so there it goes to mx itself, and mx names the file. System Settings > Privacy &amp; Security > Accessibility. Add Screen Recording for screenshots.</p></div>
       <div class="step"><h3>Check it</h3><p>Run <code>mx doctor</code>, or ask the agent to. It names the app to turn on and what's missing, then restart that app. In Claude Desktop, ask Claude to take a snapshot of Finder.</p></div>
     </div>
   </section>
@@ -577,7 +577,7 @@ resume: claude --resume 5e0c1a7b-2f4d-4c8e-9b61-0d3f7a2e8c45</span>
       <details><summary>How is this different from computer use with screenshots?</summary><p>Screenshot agents see pixels: every step costs an image and a guess at coordinates, the app has to be in front, and the agent moves your mouse. mx reads the controls as text with exact refs, works behind your windows, and takes a screenshot only when the layout matters.</p></details>
       <details><summary>Why not AppleScript?</summary><p>AppleScript reaches only apps that publish a scripting dictionary, each with its own vocabulary, and Electron apps such as Slack publish none. Every app has an accessibility tree, and mx needs one grant instead of an Automation prompt per app.</p></details>
       <details><summary>Will it take over my mouse and keyboard?</summary><p>Not in background mode. Presses, fills and plain keys go to the app directly. A real mouse click or a cmd shortcut borrows the front for 200 to 400 ms and puts your app and cursor back, and mx waits until you pause typing first. Front and watch modes take the front because you asked to see it.</p></details>
-      <details><summary>Which app do I grant Accessibility to?</summary><p>The one that starts mx: your terminal for Claude Code or Codex, or Claude Desktop or Cursor. <code>mx doctor</code> names it. Restart that app after granting.</p></details>
+      <details><summary>Which app do I grant Accessibility to?</summary><p>The one that starts mx: your terminal for Claude Code or Codex, or Cursor. <code>mx doctor</code> names it. Restart that app after granting. Claude Desktop is the exception: it runs mx.mcpb's mx as its own app, so the grant goes to mx itself, and mx's error gives the path to add. Releases are signed with the same certificate, so the grant survives updates.</p></details>
       <details><summary>Does it send my data anywhere?</summary><p>No. mx answers your agent on stdio and makes no network calls. What the agent reads goes to your agent's model, the same as anything else it reads.</p></details>
       <details><summary>Does it work on Intel Macs?</summary><p>Yes. <code>install.sh</code> and the Claude Code plugin pick the arm64 or x64 build to match your Mac. macOS 14 or later.</p></details>
       <details><summary>What can't it do?</summary><p>It can't unlock the Mac or answer permission prompts, it won't type into password fields, and screenshots need the window on the current Space. The binary isn't signed or notarized yet.</p></details>
@@ -632,8 +632,9 @@ resume: claude --resume 5e0c1a7b-2f4d-4c8e-9b61-0d3f7a2e8c45</span>
   const DESKTOP = `<a class="btn" href="${MCPB}">Download mx.mcpb</a>
     <ol>
       <li>Double-click <b>mx.mcpb</b>, or add it in Claude's Settings &gt; Extensions &gt; Install Extension. It isn't notarized yet, so Claude may show it as unsigned.</li>
-      <li>Turn on <b>Accessibility</b> for Claude in System Settings &gt; Privacy &amp; Security, and <b>Screen Recording</b> if you want screenshots.</li>
-      <li>Quit and reopen Claude, then ask it to take a snapshot of Finder.</li>
+      <li>Ask Claude to take a snapshot of Finder. Claude Desktop runs mx as its own app, so <b>Accessibility</b> goes to mx itself, not Claude, and mx names the file to add.</li>
+      <li>In System Settings &gt; Privacy &amp; Security &gt; Accessibility, click +, press Cmd+Shift+G, paste that path and turn mx on. Do the same under <b>Screen &amp; System Audio Recording</b> if you want screenshots.</li>
+      <li>Quit Claude with Cmd+Q, reopen it and ask again. The grant carries over to later versions of mx.mcpb.</li>
     </ol>
     <p>For the Chat tab. Cowork isn't supported yet. No terminal and no Node.</p>`;
   const MODE_TABS = [
