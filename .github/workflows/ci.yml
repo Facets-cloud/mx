@@ -18,3 +18,5 @@ jobs:
           node-version: '22'
       - name: Desktop extension tests
         run: node --test 'packaging/mcpb/*.test.mjs'
+      - name: Claude Code plugin tests
+        run: node --test 'packaging/plugin/*.test.mjs'
