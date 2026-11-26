@@ -16,13 +16,55 @@ jobs:
         run: scripts/npm-build.sh "$GITHUB_REF_NAME"
       - name: Test the arm64 build
         run: MX_BIN=npm/mx-darwin-arm64/bin/mx python3 tests/selftest.py --only protocol,gate,settle,diff
-      - name: Tarballs and checksums
+      - name: Tarballs
         run: |
           mkdir dist
           for arch in arm64 x64; do
             tar -czf "dist/mx_darwin_${arch}.tar.gz" -C "npm/mx-darwin-${arch}" bin/mx LICENSE THIRD_PARTY_NOTICES
           done
-          (cd dist && shasum -a 256 *.tar.gz > checksums.txt)
+      # The Claude Desktop extension carries one universal binary; mx.mcpb is
+      # the same file under a name releases/latest/download can link to. It is
+      # signed with the self-signed certificate from
+      # packaging/mcpb/make-signing-cert.sh, before the copy and before
+      # checksums.txt, so both files and the checksums carry the signature.
+      # Without the two secrets it goes out unsigned. Only this step sees them.
+      # The mx binary inside is signed first, separately, with the self-signed
+      # "mx" identity (scripts/make-signing-identity.sh): Claude Desktop runs it
+      # as its own app, so users grant Accessibility to mx itself, and a fixed
+      # identity keeps that grant across updates. Without MX_SIGNING_P12 it is
+      # signed ad hoc and the grant lapses on every update.
+      - name: Desktop extension
+        env:
+          VERSION: ${{ github.ref_name }}
+          MCPB_SIGNING_CERT: ${{ secrets.MCPB_SIGNING_CERT }}
+          MCPB_SIGNING_KEY: ${{ secrets.MCPB_SIGNING_KEY }}
+          SIGNING_P12: ${{ secrets.MX_SIGNING_P12 }}
+          MX_SIGNING_P12_PASSWORD: ${{ secrets.MX_SIGNING_P12_PASSWORD }}
+        run: |
+          universal=$(mktemp -d)/mx
+          lipo -create npm/mx-darwin-arm64/bin/mx npm/mx-darwin-x64/bin/mx -output "$universal"
+          lipo -info "$universal"
+          if [ -n "$SIGNING_P12" ]; then
+            export MX_SIGNING_P12="$RUNNER_TEMP/mx-signing.p12"
+            printf '%s' "$SIGNING_P12" | base64 -d > "$MX_SIGNING_P12"
+          else
+            echo "::notice title=mx in mx.mcpb is signed ad hoc::MX_SIGNING_P12 and MX_SIGNING_P12_PASSWORD aren't set; scripts/make-signing-identity.sh makes them. Users' Accessibility grants will lapse on update."
+          fi
+          # After lipo, so both slices carry the signature.
+          scripts/sign-macos.sh "$universal"
+          node packaging/mcpb/build.mjs "$VERSION" "$universal" dist
+          bundle="dist/mx-${VERSION#v}.mcpb"
+          if [ -n "$MCPB_SIGNING_CERT" ] && [ -n "$MCPB_SIGNING_KEY" ]; then
+            keys=$(mktemp -d)
+            trap 'rm -rf "$keys"' EXIT
+            (umask 077; printf '%s\n' "$MCPB_SIGNING_CERT" > "$keys/cert.pem"; printf '%s\n' "$MCPB_SIGNING_KEY" > "$keys/key.pem")
+            npx -y @anthropic-ai/mcpb@2.1.2 sign "$bundle" --cert "$keys/cert.pem" --key "$keys/key.pem"
+            cp "$bundle" dist/mx.mcpb
+          else
+            echo "::notice title=mx.mcpb is unsigned::MCPB_SIGNING_CERT and MCPB_SIGNING_KEY aren't set; packaging/mcpb/make-signing-cert.sh makes them."
+          fi
+      - name: Checksums
+        run: (cd dist && shasum -a 256 *.tar.gz *.mcpb > checksums.txt)
       - name: GitHub release
         env:
           GH_TOKEN: ${{ github.token }}

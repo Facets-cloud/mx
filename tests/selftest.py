@@ -21,7 +21,7 @@ import time
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # MX_BIN tests another copy, such as an npm package's bin/mx.
 BIN = os.environ.get("MX_BIN") or os.path.join(ROOT, ".build", "release", "mx")
-TOOLS = {"start", "done", "list_apps", "snapshot", "screenshot", "click", "fill", "key", "read", "batch",
+TOOLS = {"doctor", "start", "done", "list_apps", "snapshot", "screenshot", "click", "fill", "key", "read", "batch",
          "menu", "window", "app", "open", "scroll", "drag", "clipboard", "history", "settings"}
 results = []
 borrow_ms = []  # measured borrow durations, for the report
@@ -189,7 +189,7 @@ def protocol_checks():
           init["serverInfo"]["name"] == "mx" and init["protocolVersion"] == "2025-06-18", init)
     c.notify("notifications/initialized")
     names = {t["name"] for t in c.request("tools/list")["result"]["tools"]}
-    check("tools/list has the 19 tools", names == TOOLS, names)
+    check("tools/list has the 20 tools", names == TOOLS, names)
     err = c.request("nope/nothing")
     check("unknown method -> -32601", err.get("error", {}).get("code") == -32601, err)
     err = c.request("tools/call", {"name": "teleport", "arguments": {}})
@@ -228,6 +228,15 @@ def protocol_checks():
     text, is_err = u.call("list_apps")
     check("untrusted: list_apps still works", not is_err and "pid=" in text, text)
     u.close()
+
+    # Inside mx.mcpb the grant goes to the mx binary itself, so the error names its path.
+    b = Client(env={"MX_FORCE_UNTRUSTED": "1", "MX_MCPB": "1"})
+    b.request("initialize", {"protocolVersion": "2025-06-18"})
+    text, is_err = b.call("snapshot", app="TextEdit")
+    check("untrusted in mx.mcpb: names mx's own path and the steps to add it",
+          is_err and os.path.realpath(BIN) in text and "Cmd+Shift+G" in text
+          and "Claude Desktop runs mx as its own app" in text, text)
+    b.close()
     cli_checks()
 
 
@@ -264,6 +273,13 @@ def cli_checks():
     check("mx doctor without Accessibility exits 1 and names the app to turn on",
           r.returncode == 1 and "FAIL Accessibility" in r.stdout and "warn Screen Recording" in r.stdout
           and "turn on" in r.stdout, r.stdout)
+    r = subprocess.run([BIN, "doctor"], capture_output=True, text=True, timeout=10,
+                       env={**os.environ, "MX_FORCE_UNTRUSTED": "1", "MX_FORCE_NO_SCREEN": "1", "MX_MCPB": "1"})
+    me = os.path.realpath(BIN)
+    check("mx doctor in mx.mcpb sends both grants to mx itself, by path",
+          r.returncode == 1 and f"permissions go to: mx itself, {me}" in r.stdout
+          and r.stdout.count(f"paste {me} ") == 2 and "> Accessibility, click +" in r.stdout
+          and "> Screen & System Audio Recording, click +" in r.stdout, r.stdout)
     r = subprocess.run([BIN, "nope"], capture_output=True, text=True, timeout=10)
     check("an unknown argument prints usage and exits 2", r.returncode == 2 and "usage" in r.stderr, r.stderr)
 
@@ -1171,7 +1187,9 @@ def textedit_system_checks(c, ref, w, path):
     text, is_err = c.call("menu", path=["File", "Export as PDF"], **sw)
     check("menu with an ellipsis title opens the save sheet", not is_err and "sheet" in text, text)
     text, is_err = c.call("snapshot", scope="windows", **w)
-    m = re.search(r'(e\d+) textbox = "', text)
+    # The sheet's name field by its name: the first textbox can be a file in the browser,
+    # and filling that renames the user's file.
+    m = re.search(r'(e\d+) textbox "Save As:"', text)
     check("scope windows shows the sheet with its Cancel button and name field",
           not is_err and "sheet" in text and 'button "Cancel"' in text and m, text)
     if m:

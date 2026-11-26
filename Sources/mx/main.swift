@@ -174,6 +174,10 @@ let toolList: [[String: Any]] = [
         "the error gives the command for them to run.",
      "inputSchema": obj(["key": str("The setting to change, such as log.days. Omit to read them all."),
                          "value": str("The new value, such as 365, 0 (keep forever) or 10GB.")])],
+    ["name": "doctor", "description": "Check mx's setup: its version, which app macOS gives mx's permissions to, and whether Accessibility " +
+        "(every tool) and Screen Recording (screenshot) are granted. When one is missing it gives the exact steps, with the path to add " +
+        "when Claude Desktop runs mx as its own app. Run it first when mx is blocked, and pass its steps to the user word for word.",
+     "inputSchema": obj([:])],
 ]
 
 // MARK: - JSON-RPC over stdio
@@ -185,14 +189,19 @@ private func send(_ msg: [String: Any]) {
     outLock.lock(); FileHandle.standardOutput.write(data); outLock.unlock()
 }
 
-private let tools = Tools()
+let tools = Tools()
 
-private func handle(_ req: [String: Any]) {
+/// Set by `mx serve`: a refused call's result also carries the rule that refused it
+/// (in _meta), so the CLI can exit with its own code. The stdio MCP result stays as it was.
+var exposeRefusals = false
+
+/// Answers one JSON-RPC request through `out` (stdout for MCP, a socket for `mx serve`).
+func handle(_ req: [String: Any], out: ([String: Any]) -> Void = send) {
     let id = req["id"]
     let method = req["method"] as? String ?? ""
     let params = req["params"] as? [String: Any] ?? [:]
-    func reply(_ result: [String: Any]) { if let id { send(["jsonrpc": "2.0", "id": id, "result": result]) } }
-    func fail(_ code: Int, _ msg: String) { if let id { send(["jsonrpc": "2.0", "id": id, "error": ["code": code, "message": msg]]) } }
+    func reply(_ result: [String: Any]) { if let id { out(["jsonrpc": "2.0", "id": id, "result": result]) } }
+    func fail(_ code: Int, _ msg: String) { if let id { out(["jsonrpc": "2.0", "id": id, "error": ["code": code, "message": msg]]) } }
 
     switch method {
     case "initialize":
@@ -218,7 +227,9 @@ private func handle(_ req: [String: Any]) {
             reply(["content": content])
         } catch let e as MXError {
             failure = e
-            reply(["content": [["type": "text", "text": e.message]], "isError": true])
+            var result: [String: Any] = ["content": [["type": "text", "text": e.message]], "isError": true]
+            if exposeRefusals, let rule = e.rule { result["_meta"] = ["mx/refused": rule] }
+            reply(result)
         } catch {
             failure = MXError("\(error)")
             reply(["content": [["type": "text", "text": "\(error)"]], "isError": true])
@@ -235,18 +246,25 @@ private func handle(_ req: [String: Any]) {
     }
 }
 
-// With no arguments mx is the MCP server; the rest are terminal commands.
+// With no arguments mx is the MCP server; the rest are terminal commands. A tool name
+// runs that tool through this agent session's background process (`mx serve`, CLI.swift).
+var servePath: String?
 if let cmd = CommandLine.arguments.dropFirst().first {
     let rest = Array(CommandLine.arguments.dropFirst(2))
     switch cmd {
     case "--version", "-v": print("mx \(mxVersion)"); exit(0)
+    case "--help", "-h", "help": print(mainHelp(), terminator: ""); exit(0)
+    case "doctor" where rest.contains("--help") || rest.contains("-h"): print(toolHelp("doctor"), terminator: ""); exit(0)
     case "doctor": exit(doctor())
+    case "history" where rest.contains("--help") || rest.contains("-h"): print(toolHelp("history"), terminator: ""); exit(0)
     case "history": exit(historyCommand(rest))
     case "config": exit(configCommand(rest))
+    case "stop": exit(stopCommand())
+    case "serve" where rest.count == 2 && rest[0] == "--socket": servePath = rest[1]
+    case _ where toolList.contains { $0["name"] as? String == cmd }: exit(toolCommand(cmd, rest))
     default:
-        FileHandle.standardError.write(Data(("usage: mx            run the MCP server on stdio\n       mx doctor     check Accessibility and Screen Recording\n" +
-            "       mx history [current|previous|<session>] [--limit n] [--json]\n       mx history pin <session> \"<name>\"\n" +
-            "       mx history pinned [<name>]\n       mx config [set <key> <value>]\n       mx --version\n").utf8))
+        FileHandle.standardError.write(Data(("mx: unknown command \(cmd)\nusage: mx <tool> [flags]   run a tool (mx --help lists them)\n" +
+            "       mx                   run the MCP server on stdio\n").utf8))
         exit(2)
     }
 }
@@ -257,9 +275,17 @@ let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
 
 /// Tool calls run here, one at a time and in order, so stdin stays read while a call runs.
-private let calls = DispatchQueue(label: "mx.calls")
+let calls = DispatchQueue(label: "mx.calls")
 
-Thread {
+/// The client went away. Hide the overlay now, even if a call is still running, then exit
+/// once that call ends (so a borrow still hands the front back), or after 5 s if it never does.
+func shutdown() {
+    Overlay.shared.close()
+    calls.async { tools.releaseCursor(); _ = tools.restoreUserClipboard(); auditQueue.sync {}; exit(0) }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 5) { exit(0) }
+}
+
+if let servePath { serve(servePath) } else { Thread {
     while let line = readLine(strippingNewline: true) {
         guard !line.isEmpty else { continue }
         guard let data = line.data(using: .utf8),
@@ -269,12 +295,7 @@ Thread {
         }
         calls.async { handle(req) }
     }
-    // stdin closed: the client went away. Hide the overlay now, even if a call is still
-    // running, then exit once that call ends (so a borrow still hands the front back),
-    // or after 5 s if it never does.
-    Overlay.shared.close()
-    calls.async { tools.releaseCursor(); _ = tools.restoreUserClipboard(); auditQueue.sync {}; exit(0) }
-    DispatchQueue.main.asyncAfter(deadline: .now() + 5) { exit(0) }
-}.start()
+    shutdown()  // stdin closed
+}.start() }
 
 app.run()

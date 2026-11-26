@@ -153,6 +153,7 @@ final class Tools {
         fakeIdleMs = (args["_fake_idle_ms"] as? NSNumber)?.doubleValue
         if name == "history" { return try historyTool(args) }
         if name == "settings" { return try settingsTool(args) }
+        if name == "doctor" { return doctorReport().text }
         if !["start", "done", "list_apps", "clipboard"].contains(name) { try checkTrust() }
         if name != "start" && name != "done" && started == nil { started = now(); actions = 0 }
         defer { if name != "done" { idle() } }
@@ -989,9 +990,28 @@ final class Tools {
 }
 
 func accessibilityError() -> MXError {
-    MXError("mx is not trusted for Accessibility, so it cannot read or drive apps. " +
-        "Open System Settings > Privacy & Security > Accessibility and turn on \(responsibleApp()), " +
-        "then restart it and try again.")
+    MXError("mx is not trusted for Accessibility, so it cannot read or drive apps. " + grantSteps("Accessibility"))
+}
+
+/// How to grant the permission in System Settings > Privacy & Security > `pane`. macOS asks
+/// it of the app responsible for mx: the terminal or agent app that started it. Claude Desktop
+/// starts its extensions' servers as their own responsible apps (Contents/Helpers/disclaimer),
+/// so inside mx.mcpb (MX_MCPB=1) Claude's grant doesn't reach mx, and the user adds the mx
+/// binary itself.
+func grantSteps(_ pane: String) -> String {
+    if let mx = bundledSelf() {
+        return "Claude Desktop runs mx as its own app, so Claude's \(pane) permission doesn't cover it. " +
+            "Ask the user to open System Settings > Privacy & Security > \(pane), click +, press Cmd+Shift+G, paste " +
+            mx + " , press Return, click Open and turn mx on, then quit Claude with Cmd+Q and reopen it."
+    }
+    return "Open System Settings > Privacy & Security > \(pane) and turn on \(responsibleApp()), " +
+        "then restart it and try again."
+}
+
+/// This binary's path when it runs inside mx.mcpb (MX_MCPB=1, set by the bundle's manifest), else nil.
+func bundledSelf() -> String? {
+    guard ProcessInfo.processInfo.environment["MX_MCPB"] == "1" else { return nil }
+    return Bundle.main.executableURL?.resolvingSymlinksInPath().path
 }
 
 /// The GUI app that launched this process (the one macOS asks Accessibility trust of).

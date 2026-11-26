@@ -13,9 +13,9 @@ keep typing in your own app while the agent works in another.
 See it run: **https://facets-cloud.github.io/mx/** has the demo video and six
 real agent runs.
 
-mx is one Swift binary that uses only Apple's frameworks. It speaks MCP
-(JSON-RPC 2.0) on stdio, sends nothing over the network and has no
-telemetry.
+mx is one Swift binary that uses only Apple's frameworks. Agents run it as
+a CLI (`mx <tool>`) or as an MCP server on stdio. It sends nothing over the
+network and has no telemetry.
 
 **Platforms:** macOS 14 or later, on Apple silicon and Intel. The
 accessibility API is Mac-only, so there is no Linux or Windows build.
@@ -36,8 +36,8 @@ done      "Brightness was 62%, now 100%"
 
 - **macOS 14 or later.**
 - **Accessibility**, for the app that runs mx: your terminal, editor,
-  Claude Desktop, Cursor or other agent app. Every tool except
-  `list_apps`, `start` and `done` needs it.
+  Cursor or other agent app. With mx.mcpb in Claude Desktop, it goes to mx
+  itself. Every tool except `list_apps`, `start` and `done` needs it.
 - **Screen Recording** for the same app, only if you want `screenshot`.
 
 Turn them on in System Settings > Privacy & Security and restart that app.
@@ -116,54 +116,100 @@ out. Screenshots leave them out.
 
 ## Install
 
-You need Node 18 or later for `npx`. Each line below adds the same server.
+The quickest way is to paste the **Ask your agent** prompt from
+[the site](https://facets-cloud.github.io/mx/) into your coding agent. It
+installs mx and walks you through the permission step. To do it yourself,
+pick the section that's yours. None of them need Node.
 
-**Claude Code plugin** (the server plus the mx skill, which teaches the
-agent the workflow and the safety rules):
+### Terminal agents
+
+Your agent runs commands in a terminal.
+
+**Claude Code.** Add the plugin:
 
 ```sh
 claude plugin marketplace add Facets-cloud/mx
 claude plugin install mx@mx
 ```
 
-**Claude Code, server only:**
+The plugin puts the `mx` CLI on Claude Code's PATH, downloads the binary
+the first time it runs, and adds the mx skill, which teaches the agent the
+commands and the safety rules. It has no MCP server. Restart Claude Code
+after installing.
+
+**Codex, Cursor and other agents.** Install the CLI, then add mx as an MCP
+server with the command `mx` and no arguments:
 
 ```sh
-claude mcp add -s user mx -- npx -y @facets-cloud/mx
+curl -fsSL https://facets-cloud.github.io/mx/install.sh | sh
+codex mcp add mx -- ~/.local/bin/mx          # Codex
 ```
 
-**Codex**, in `~/.codex/config.toml`:
-
-```toml
-[mcp_servers.mx]
-command = "npx"
-args = ["-y", "@facets-cloud/mx"]
-```
-
-**Cursor, Claude Desktop and other MCP apps**, in their MCP config
-(`~/.cursor/mcp.json`, `claude_desktop_config.json`):
+Cursor and most other agents take this block in their MCP config
+(`~/.cursor/mcp.json` for Cursor):
 
 ```json
-{ "mcpServers": { "mx": { "command": "npx", "args": ["-y", "@facets-cloud/mx"] } } }
+{ "mcpServers": { "mx": { "command": "mx" } } }
 ```
 
-Restart the app after adding it. Then check the permissions:
+If the agent can't find `mx`, use the full path that install.sh prints,
+such as `/Users/you/.local/bin/mx`. Restart the agent after adding it.
+
+### Claude Desktop
+
+You chat in the Claude app and don't use a terminal.
+
+1. Download [mx.mcpb](https://github.com/Facets-cloud/mx/releases/latest/download/mx.mcpb)
+   and double-click it, or add it in Claude's Settings > Extensions >
+   Install Extension. It isn't notarized yet, so Claude may show it as
+   unsigned.
+2. Ask Claude to run mx's doctor. Claude Desktop runs mx as its own app, so
+   Accessibility goes to mx itself, not Claude. The file is
+   `~/Library/Application Support/Claude/Claude Extensions/local.mcpb.facets-cloud.mx/server/mx`, and doctor names it too.
+   In System Settings > Privacy & Security > Accessibility, click +, press
+   Cmd+Shift+G, paste that path and turn mx on. Do the same under Screen &
+   System Audio Recording if you want screenshots.
+3. Quit Claude with Cmd+Q, reopen it and ask again.
+
+Releases sign mx with the same certificate every time, so the grant
+carries over when you install a newer mx.mcpb.
+
+This is for the Chat tab. Cowork isn't supported yet.
+
+### The CLI
 
 ```sh
-npx -y @facets-cloud/mx doctor
+curl -fsSL https://facets-cloud.github.io/mx/install.sh | sh
 ```
 
-Always use the scoped name `@facets-cloud/mx`. To pin a version, write
-`@facets-cloud/mx@0.1.0`. Release tarballs for both architectures, with
-`checksums.txt`, are on the
-[releases page](https://github.com/Facets-cloud/mx/releases) if you'd rather put the
-binary on your PATH and point the config at it.
+The script downloads the build for your Mac (arm64 or x64), checks its
+SHA-256 against the release's `checksums.txt` and refuses on a mismatch,
+installs `mx` into `~/.local/bin` without sudo, and runs `mx doctor`. Pin a
+version with `MX_VERSION=v0.1.4`, or pick another folder with
+`MX_INSTALL_DIR`. Release tarballs for both architectures are also on the
+[releases page](https://github.com/Facets-cloud/mx/releases).
+
+`mx <tool> [flags]` runs any tool from the shell, such as `mx list_apps`
+or `mx snapshot --app TextEdit`. `mx` with no arguments is the MCP server.
+
+npm still publishes mx as `@facets-cloud/mx`, so `npx -y @facets-cloud/mx`
+works as the MCP command if you'd rather use Node 18 or later.
+
+### Check it
+
+```sh
+mx doctor
+```
+
+It names the app that needs Accessibility and says what's missing. Grant
+it, restart that app, and run it again.
 
 ### Permissions
 
 macOS gives these to the app that launched mx, not to mx itself. That is
-your terminal (Terminal, iTerm, Ghostty and so on), your editor, or Claude
-Desktop or Cursor.
+your terminal (Terminal, iTerm, Ghostty and so on), your editor, or Cursor.
+Claude Desktop is the exception: it runs mx.mcpb's mx as its own app, so
+the grants go to that mx binary, and mx names its path.
 
 - **Accessibility** is required by every tool except `list_apps`, `start`
   and `done`.
@@ -185,11 +231,11 @@ It exits 0 when Accessibility is granted and 1 when it isn't.
 
 ## Tools
 
-19 tools.
+20 tools.
 
 | Group | Tools |
 | --- | --- |
-| Session | `start` (title, mode, typing), `done` (summary; returns time taken and action count) |
+| Session | `start` (title, mode, typing), `done` (summary; returns time taken and action count), `doctor` (permissions, and the steps when one is missing) |
 | Read | `list_apps`, `snapshot`, `read`, `screenshot` |
 | Act | `click`, `fill`, `key`, `batch`, `scroll`, `drag` |
 | The rest of the Mac | `menu`, `window`, `app`, `open`, `clipboard` |

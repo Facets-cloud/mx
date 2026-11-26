@@ -1,0 +1,13 @@
+#!/bin/sh
+# bin/mx in the mx plugin. Claude Code puts the plugin's bin/ on the Bash
+# tool's PATH after the user's own entries, so an mx the user installed runs
+# first and this runs only when there is none. It runs the plugin's own mx
+# (see hooks/setup.sh for where it lives), installing it first if the
+# session-start hook hasn't yet. If that install fails, it runs mx through npx.
+here=$(cd "$(dirname "$0")" && pwd)
+setup="$here/../hooks/setup.sh"
+bin=$(sh "$setup" path)
+if [ ! -x "$bin" ]; then
+  sh "$setup" cli || exec npx -y @facets-cloud/mx "$@"
+fi
+exec "$bin" "$@"

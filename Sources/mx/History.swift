@@ -407,11 +407,23 @@ func pinnedText(_ name: String) throws -> String {
 /// mx history pinned [<name>]. Returns the exit code.
 func historyCommand(_ args: [String]) -> Int32 {
     var pos: [String] = [], limit = 0, json = false
+    var session: String?, pinName: String?, pinned: String?
     var i = 0
     while i < args.count {
-        if args[i] == "--json" { json = true } else if args[i] == "--limit", i + 1 < args.count { limit = Int(args[i + 1]) ?? 0; i += 1 } else { pos.append(args[i]) }
+        if args[i] == "--json" { json = true } else if args[i] == "--limit", i + 1 < args.count { limit = Int(args[i + 1]) ?? 0; i += 1 }
+        // The history tool's flags, so `mx history` is both the command and the tool.
+        else if args[i] == "--session", i + 1 < args.count { session = args[i + 1]; i += 1 }
+        else if args[i] == "--pin", i + 1 < args.count { pinName = args[i + 1]; i += 1 }
+        else if args[i] == "--pinned" {
+            pinned = i + 1 < args.count && !args[i + 1].hasPrefix("--") ? args[i + 1] : ""
+            if !pinned!.isEmpty { i += 1 }
+        } else if args[i].hasPrefix("--") {
+            FileHandle.standardError.write(Data("mx: unknown flag \(args[i]) for mx history; flags: --session, --limit, --pin, --pinned, --json\n".utf8))
+            return 2
+        } else { pos.append(args[i]) }
         i += 1
     }
+    if let pinName { pos = ["pin", session ?? "current", pinName] } else if let pinned { pos = ["pinned", pinned] } else if let session { pos = [session] }
     do {
         switch pos.first {
         case "pin":
