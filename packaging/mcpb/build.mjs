@@ -31,7 +31,7 @@ export function manifest(version) {
     description: plugin.description,
     long_description:
       "mx lets Claude run its steps inside the Mac apps you already have open and signed in to, through the macOS accessibility API. It works in the background by default, sends nothing over the network and has no telemetry.\n\n" +
-      "**Before you start:** mx needs macOS 14 or later. Claude Desktop runs mx as its own app, so in System Settings > Privacy & Security give **Accessibility** to mx itself, not Claude (every tool except `list_apps`, `start` and `done` needs it), and **Screen Recording** too if you want screenshots. mx names the file to add when it lacks a permission. Then quit Claude with Cmd+Q and reopen it.",
+      "**Before you start:** mx needs macOS 14 or later. Claude Desktop runs mx as its own app, so in System Settings > Privacy & Security give **Accessibility** to mx itself, not Claude (every tool except `list_apps`, `start` and `done` needs it), and **Screen Recording** too if you want screenshots. The file is `~/Library/Application Support/Claude/Claude Extensions/local.mcpb.facets-cloud.mx/server/mx`; mx's doctor tool names it and gives the steps. Then quit Claude with Cmd+Q and reopen it.",
     author: { name: "Facets Cloud", url: "https://github.com/Facets-cloud" },
     homepage: "https://facets-cloud.github.io/mx/",
     documentation: "https://github.com/Facets-cloud/mx#readme",

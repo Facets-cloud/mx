@@ -163,12 +163,12 @@ You chat in the Claude app and don't use a terminal.
    and double-click it, or add it in Claude's Settings > Extensions >
    Install Extension. It isn't notarized yet, so Claude may show it as
    unsigned.
-2. Ask Claude to take a snapshot of Finder. Claude Desktop runs mx as its
-   own app, so Accessibility goes to mx itself, not Claude, and mx's error
-   names the file to add. In System Settings > Privacy & Security >
-   Accessibility, click +, press Cmd+Shift+G, paste that path and turn mx
-   on. Do the same under Screen & System Audio Recording if you want
-   screenshots.
+2. Ask Claude to run mx's doctor. Claude Desktop runs mx as its own app, so
+   Accessibility goes to mx itself, not Claude. The file is
+   `~/Library/Application Support/Claude/Claude Extensions/local.mcpb.facets-cloud.mx/server/mx`, and doctor names it too.
+   In System Settings > Privacy & Security > Accessibility, click +, press
+   Cmd+Shift+G, paste that path and turn mx on. Do the same under Screen &
+   System Audio Recording if you want screenshots.
 3. Quit Claude with Cmd+Q, reopen it and ask again.
 
 Releases sign mx with the same certificate every time, so the grant
@@ -231,11 +231,11 @@ It exits 0 when Accessibility is granted and 1 when it isn't.
 
 ## Tools
 
-19 tools.
+20 tools.
 
 | Group | Tools |
 | --- | --- |
-| Session | `start` (title, mode, typing), `done` (summary; returns time taken and action count) |
+| Session | `start` (title, mode, typing), `done` (summary; returns time taken and action count), `doctor` (permissions, and the steps when one is missing) |
 | Read | `list_apps`, `snapshot`, `read`, `screenshot` |
 | Act | `click`, `fill`, `key`, `batch`, `scroll`, `drag` |
 | The rest of the Mac | `menu`, `window`, `app`, `open`, `clipboard` |

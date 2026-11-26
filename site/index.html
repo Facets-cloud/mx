@@ -546,11 +546,11 @@ resume: claude --resume 5e0c1a7b-2f4d-4c8e-9b61-0d3f7a2e8c45</span>
   </section>
 
   <section id="tools">
-    <div class="kicker">// 19 tools</div>
+    <div class="kicker">// 20 tools</div>
     <h2>Everything you'd do with the keyboard and mouse.</h2>
     <p class="sub">Snapshot, act by ref or by role and name, read the diff. <code>batch</code> runs a whole plan in one call and stops at the first failure.</p>
     <div class="tools-grid">
-      <div class="group"><h3>Session <span>4</span></h3><ul><li>start</li><li>done</li><li>history</li><li>settings</li></ul></div>
+      <div class="group"><h3>Session <span>5</span></h3><ul><li>start</li><li>done</li><li>doctor</li><li>history</li><li>settings</li></ul></div>
       <div class="group"><h3>Read <span>4</span></h3><ul><li>list_apps</li><li>snapshot</li><li>read</li><li>screenshot</li></ul></div>
       <div class="group"><h3>Act <span>6</span></h3><ul><li>click</li><li>fill</li><li>key</li><li>batch</li><li>scroll</li><li>drag</li></ul></div>
       <div class="group mac"><h3>The rest of the Mac <span>5</span></h3><ul><li>menu</li><li>window</li><li>app</li><li>open</li><li>clipboard</li></ul></div>
@@ -632,7 +632,7 @@ resume: claude --resume 5e0c1a7b-2f4d-4c8e-9b61-0d3f7a2e8c45</span>
   const DESKTOP = `<a class="btn" href="${MCPB}">Download mx.mcpb</a>
     <ol>
       <li>Double-click <b>mx.mcpb</b>, or add it in Claude's Settings &gt; Extensions &gt; Install Extension. It isn't notarized yet, so Claude may show it as unsigned.</li>
-      <li>Ask Claude to take a snapshot of Finder. Claude Desktop runs mx as its own app, so <b>Accessibility</b> goes to mx itself, not Claude, and mx names the file to add.</li>
+      <li>Ask Claude to run mx's doctor. Claude Desktop runs mx as its own app, so <b>Accessibility</b> goes to mx itself, not Claude: <code>~/Library/Application Support/Claude/Claude Extensions/local.mcpb.facets-cloud.mx/server/mx</code>. Doctor names it too.</li>
       <li>In System Settings &gt; Privacy &amp; Security &gt; Accessibility, click +, press Cmd+Shift+G, paste that path and turn mx on. Do the same under <b>Screen &amp; System Audio Recording</b> if you want screenshots.</li>
       <li>Quit Claude with Cmd+Q, reopen it and ask again. The grant carries over to later versions of mx.mcpb.</li>
     </ol>

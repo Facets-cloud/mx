@@ -153,6 +153,7 @@ final class Tools {
         fakeIdleMs = (args["_fake_idle_ms"] as? NSNumber)?.doubleValue
         if name == "history" { return try historyTool(args) }
         if name == "settings" { return try settingsTool(args) }
+        if name == "doctor" { return doctorReport().text }
         if !["start", "done", "list_apps", "clipboard"].contains(name) { try checkTrust() }
         if name != "start" && name != "done" && started == nil { started = now(); actions = 0 }
         defer { if name != "done" { idle() } }

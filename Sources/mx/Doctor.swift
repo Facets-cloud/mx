@@ -7,6 +7,15 @@ import Foundation
 /// Prints the permission report and returns the exit code: 0 when Accessibility is
 /// granted (Screen Recording is only needed for screenshots), else 1.
 func doctor() -> Int32 {
+    let (text, ok) = doctorReport()
+    print(text)
+    return ok ? 0 : 1
+}
+
+/// The report `mx doctor` prints and the doctor tool returns, and whether Accessibility is granted.
+func doctorReport() -> (text: String, ok: Bool) {
+    var lines: [String] = []
+    func print(_ s: String) { lines.append(s) }
     let env = ProcessInfo.processInfo.environment
     let os = ProcessInfo.processInfo.operatingSystemVersion
     var arch = utsname()
@@ -24,5 +33,5 @@ func doctor() -> Int32 {
     print(ax ? "ok   Accessibility: granted, every tool works" : "FAIL Accessibility: " + accessibilityError().message)
     print(screen ? "ok   Screen Recording: granted, screenshot works"
                  : "warn Screen Recording: " + screenRecordingError().message)
-    return ax ? 0 : 1
+    return (lines.joined(separator: "\n"), ax)
 }

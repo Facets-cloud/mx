@@ -253,7 +253,8 @@ func stopCommand() -> Int32 {
 
 private let groups: [(String, [(String, String)])] = [
     ("Session", [("start", "Begin a session: a short title, and mode background, front or watch"),
-                 ("done", "End the session with a one-line summary")]),
+                 ("done", "End the session with a one-line summary"),
+                 ("doctor", "Check mx's permissions and which app holds them")]),
     ("Look", [("list_apps", "Running apps with a window (--all adds system processes)"),
               ("snapshot", "An app's elements, one per line, each with a ref such as e12"),
               ("screenshot", "PNG of a window, element or display, with refs drawn on it"),
@@ -294,6 +295,7 @@ private let examples: [String: [String]] = [
     "clipboard": ["mx clipboard --op set --text \"hello\"", "mx clipboard --op get --confirm"],
     "history": ["mx history", "mx history --session current", "mx history --pin \"weekly report\"", "mx history --pinned \"weekly report\""],
     "settings": ["mx settings", "mx settings --key log.days --value 365"],
+    "doctor": ["mx doctor"],
 ]
 
 func mainHelp() -> String {
@@ -314,7 +316,6 @@ func mainHelp() -> String {
     }
     s += """
     Commands:
-      doctor      Check Accessibility and Screen Recording
       config      Show the log settings, or set one: mx config set <key> <value>
       stop        End this session's background mx process
       --version   Print the version

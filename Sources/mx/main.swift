@@ -174,6 +174,10 @@ let toolList: [[String: Any]] = [
         "the error gives the command for them to run.",
      "inputSchema": obj(["key": str("The setting to change, such as log.days. Omit to read them all."),
                          "value": str("The new value, such as 365, 0 (keep forever) or 10GB.")])],
+    ["name": "doctor", "description": "Check mx's setup: its version, which app macOS gives mx's permissions to, and whether Accessibility " +
+        "(every tool) and Screen Recording (screenshot) are granted. When one is missing it gives the exact steps, with the path to add " +
+        "when Claude Desktop runs mx as its own app. Run it first when mx is blocked, and pass its steps to the user word for word.",
+     "inputSchema": obj([:])],
 ]
 
 // MARK: - JSON-RPC over stdio
@@ -250,6 +254,7 @@ if let cmd = CommandLine.arguments.dropFirst().first {
     switch cmd {
     case "--version", "-v": print("mx \(mxVersion)"); exit(0)
     case "--help", "-h", "help": print(mainHelp(), terminator: ""); exit(0)
+    case "doctor" where rest.contains("--help") || rest.contains("-h"): print(toolHelp("doctor"), terminator: ""); exit(0)
     case "doctor": exit(doctor())
     case "history" where rest.contains("--help") || rest.contains("-h"): print(toolHelp("history"), terminator: ""); exit(0)
     case "history": exit(historyCommand(rest))

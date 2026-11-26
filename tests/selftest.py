@@ -21,7 +21,7 @@ import time
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # MX_BIN tests another copy, such as an npm package's bin/mx.
 BIN = os.environ.get("MX_BIN") or os.path.join(ROOT, ".build", "release", "mx")
-TOOLS = {"start", "done", "list_apps", "snapshot", "screenshot", "click", "fill", "key", "read", "batch",
+TOOLS = {"doctor", "start", "done", "list_apps", "snapshot", "screenshot", "click", "fill", "key", "read", "batch",
          "menu", "window", "app", "open", "scroll", "drag", "clipboard", "history", "settings"}
 results = []
 borrow_ms = []  # measured borrow durations, for the report
@@ -189,7 +189,7 @@ def protocol_checks():
           init["serverInfo"]["name"] == "mx" and init["protocolVersion"] == "2025-06-18", init)
     c.notify("notifications/initialized")
     names = {t["name"] for t in c.request("tools/list")["result"]["tools"]}
-    check("tools/list has the 19 tools", names == TOOLS, names)
+    check("tools/list has the 20 tools", names == TOOLS, names)
     err = c.request("nope/nothing")
     check("unknown method -> -32601", err.get("error", {}).get("code") == -32601, err)
     err = c.request("tools/call", {"name": "teleport", "arguments": {}})
